@@ -224,11 +224,14 @@ void frame_tick(FrameState& state) {
     float panel_x = static_cast<float>(screen_w) - UI_PANEL_WIDTH - UI_MARGIN;
 
     // Input panel (top right)
-    gateflow::UIAction action = gateflow::draw_input_panel(ui, panel_x, UI_MARGIN, UI_PANEL_WIDTH);
+    gateflow::InputPanelResult input_panel =
+        gateflow::draw_input_panel(ui, panel_x, UI_MARGIN, UI_PANEL_WIDTH);
+    gateflow::UIAction action = input_panel.action;
 
     // Info panel (below input panel)
+    float info_panel_y = UI_MARGIN + input_panel.panel_height + 10.0f;
     gateflow::draw_info_panel(*app.circuit, *app.scheduler, ui.input_a, ui.input_b, app.result,
-                              panel_x, 330.0f, UI_PANEL_WIDTH);
+                              panel_x, info_panel_y, UI_PANEL_WIDTH);
 
     // --- HUD: mode, depth, NAND indicator ---
     const char* mode_str = mode_label(app.scheduler->mode());

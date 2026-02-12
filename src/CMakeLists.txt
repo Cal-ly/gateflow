@@ -45,6 +45,16 @@ target_link_libraries(gateflow PRIVATE gateflow_ui)
 if(NOT EMSCRIPTEN)
     foreach(tgt gateflow_simulation gateflow_timing gateflow_rendering gateflow_ui gateflow)
         target_compile_options(${tgt} PRIVATE -Wall -Wextra -Wpedantic)
+
+        if(GATEFLOW_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+            target_compile_options(${tgt} PRIVATE
+                $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+                $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
+            )
+            target_link_options(${tgt} PRIVATE
+                $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+            )
+        endif()
     endforeach()
 endif()
 
@@ -56,10 +66,16 @@ if(EMSCRIPTEN)
     target_link_options(gateflow PRIVATE
         -sUSE_GLFW=3                     # Raylib uses GLFW
         -sALLOW_MEMORY_GROWTH=1          # Dynamic heap
-        -sASYNCIFY                        # Allows emscripten_sleep / main_loop
-        -sFORCE_FILESYSTEM=1             # Required for Raylib file I/O
         --shell-file ${WASM_SHELL}       # Custom HTML shell
     )
+
+    if(GATEFLOW_EMSCRIPTEN_ENABLE_ASYNCIFY)
+        target_link_options(gateflow PRIVATE -sASYNCIFY)
+    endif()
+
+    if(GATEFLOW_EMSCRIPTEN_ENABLE_FILESYSTEM)
+        target_link_options(gateflow PRIVATE -sFORCE_FILESYSTEM=1)
+    endif()
 
     # Set output to .html so Emscripten generates the page
     set_target_properties(gateflow PROPERTIES

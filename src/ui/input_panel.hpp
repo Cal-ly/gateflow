@@ -22,6 +22,12 @@ struct UIAction {
     bool speed_changed = false;  ///< Speed slider was dragged
 };
 
+/// Result of drawing the input panel.
+struct InputPanelResult {
+    UIAction action;
+    float panel_height = 0.0f;
+};
+
 /// Persistent UI state — kept across frames
 struct UIState {
     int input_a = 42;
@@ -47,7 +53,7 @@ struct UIState {
 /// @param panel_x Left edge of the panel in screen coordinates
 /// @param panel_y Top edge of the panel in screen coordinates
 /// @param panel_w Width of the panel
-/// @return Actions triggered this frame
-UIAction draw_input_panel(UIState& state, float panel_x, float panel_y, float panel_w);
+/// @return Actions and rendered panel height for dynamic panel stacking
+InputPanelResult draw_input_panel(UIState& state, float panel_x, float panel_y, float panel_w);
 
 } // namespace gateflow

@@ -59,9 +59,30 @@ cmake --build build
 # Run the app
 ./build/src/gateflow
 
-# Run tests (37 tests, 309 assertions)
+# Run tests (45 tests, 356 assertions)
 ./build/tests/gateflow_tests
 ```
+
+### Optional build flags
+
+```bash
+# Debug sanitizers (ASan + UBSan, GCC/Clang)
+cmake -B build-sanitize -S . -DCMAKE_BUILD_TYPE=Debug -DGATEFLOW_ENABLE_SANITIZERS=ON
+cmake --build build-sanitize
+./build-sanitize/tests/gateflow_tests
+```
+
+```bash
+# Web build with optional Emscripten features
+emcmake cmake -B build-web -S . -DCMAKE_BUILD_TYPE=Release -DPLATFORM=Web \
+    -DGATEFLOW_EMSCRIPTEN_ENABLE_ASYNCIFY=ON \
+    -DGATEFLOW_EMSCRIPTEN_ENABLE_FILESYSTEM=ON
+```
+
+Notes:
+- `GATEFLOW_EMSCRIPTEN_ENABLE_ASYNCIFY` defaults to `OFF` (smaller/faster WASM by default).
+- `GATEFLOW_EMSCRIPTEN_ENABLE_FILESYSTEM` defaults to `OFF`.
+- `GATEFLOW_ENABLE_SANITIZERS` defaults to `OFF`.
 
 ### WebAssembly
 
@@ -125,7 +146,7 @@ gateflow/
 │   ├── timing/                 # PropagationScheduler
 │   ├── rendering/              # Layout, gate/wire renderers, animation state
 │   └── ui/                     # Input panel, info panel
-├── tests/                      # Catch2 unit tests (37 tests, 309 assertions)
+├── tests/                      # Catch2 unit tests (45 tests, 356 assertions)
 ├── web/
 │   └── shell.html              # Custom Emscripten HTML shell
 └── docs/
@@ -143,6 +164,14 @@ gateflow/
 - **CMake** — build system with FetchContent dependency management
 - **Emscripten** — C++ → WebAssembly compilation
 - **No external UI libraries** — all UI drawn with Raylib primitives
+
+---
+
+## Quality Status
+
+- Native build: passing
+- Sanitizer build (Debug, ASan/UBSan): passing
+- Test suite: **45 tests, 356 assertions**
 
 ---
 

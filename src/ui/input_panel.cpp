@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 
 namespace gateflow {
 
@@ -21,6 +22,7 @@ constexpr float LABEL_WIDTH = 28.0f;
 constexpr float PADDING = 10.0f;
 constexpr int FONT_SIZE = 16;
 constexpr int FONT_SIZE_SMALL = 13;
+constexpr float SLIDER_EPSILON = 0.001f;
 
 // --- Colors ---
 const Color BG_COLOR = {35, 35, 42, 230};
@@ -186,7 +188,7 @@ bool draw_slider(const char* label, float& value, float min_val, float max_val, 
         float new_norm = (mouse.x - x) / track_w;
         new_norm = std::clamp(new_norm, 0.0f, 1.0f);
         float new_val = min_val + new_norm * (max_val - min_val);
-        if (new_val != value) {
+        if (std::fabs(new_val - value) > SLIDER_EPSILON) {
             value = new_val;
             changed = true;
         }
@@ -212,17 +214,28 @@ bool draw_slider(const char* label, float& value, float min_val, float max_val, 
 
 } // namespace
 
-UIAction draw_input_panel(UIState& state, float panel_x, float panel_y, float panel_w) {
-    UIAction action;
+InputPanelResult draw_input_panel(UIState& state, float panel_x, float panel_y, float panel_w) {
+    InputPanelResult result;
+    UIAction& action = result.action;
+
+    // Measure the panel's height from current control stack, so callers can
+    // place subsequent panels without hardcoded offsets.
+    float measure_y = panel_y + PADDING;
+    measure_y += ROW_HEIGHT;                      // Title row
+    measure_y += ROW_HEIGHT + ROW_GAP;            // Input A
+    measure_y += ROW_HEIGHT + ROW_GAP + 4.0f;     // Input B
+    measure_y += BUTTON_HEIGHT + ROW_GAP + 4.0f;  // Button row
+    measure_y += ROW_HEIGHT + SLIDER_HEIGHT + ROW_GAP; // Slider block
+    measure_y += BUTTON_HEIGHT;                   // NAND toggle
+    result.panel_height = (measure_y + PADDING) - panel_y;
 
     float content_w = panel_w - 2.0f * PADDING;
     float cx = panel_x + PADDING;
     float cy = panel_y + PADDING;
 
     // Panel background
-    float panel_h = 310.0f;
-    DrawRectangleRec({panel_x, panel_y, panel_w, panel_h}, BG_COLOR);
-    DrawRectangleLinesEx({panel_x, panel_y, panel_w, panel_h}, 1.0f, BORDER_COLOR);
+    DrawRectangleRec({panel_x, panel_y, panel_w, result.panel_height}, BG_COLOR);
+    DrawRectangleLinesEx({panel_x, panel_y, panel_w, result.panel_height}, 1.0f, BORDER_COLOR);
 
     // Title
     DrawText("INPUTS", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE, TEXT_COLOR);
@@ -275,7 +288,7 @@ UIAction draw_input_panel(UIState& state, float panel_x, float panel_y, float pa
         action.nand_toggled = true;
     }
 
-    return action;
+    return result;
 }
 
 } // namespace gateflow
