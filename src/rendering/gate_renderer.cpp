@@ -349,24 +349,40 @@ void draw_io_labels(const Circuit& circuit, const Layout& layout, float scale, V
     int num_inputs = static_cast<int>(circuit.input_wires().size());
     int bits = num_inputs / 2;
 
-    // Draw input dots and labels
+    // Smaller font for input labels to avoid overlap within tight columns.
+    constexpr int INPUT_FONT = 14;
+
+    // Draw input dots and labels.
+    // A[i] and B[i] share a column and are close together, so we right-align
+    // A labels (text extends left of the dot) and left-align B labels (text
+    // extends right of the dot) to prevent overlap.
     for (size_t i = 0; i < layout.input_positions.size(); i++) {
         Vector2 pos = to_screen(layout.input_positions[i], scale, offset);
         DrawCircleV(pos, IO_DOT_RADIUS, IO_DOT_COLOR);
 
-        // Label: A0, A1, ... or B0, B1, ...
         std::string label;
-        if (static_cast<int>(i) < bits) {
+        bool is_a = static_cast<int>(i) < bits;
+        if (is_a) {
             bool bit = circuit.input_wires()[i]->get_value();
-            label = "A" + std::to_string(i) + ": " + (bit ? "1" : "0");
+            label = "A" + std::to_string(i) + ":" + (bit ? "1" : "0");
         } else {
             size_t bi = i - static_cast<size_t>(bits);
             bool bit = circuit.input_wires()[i]->get_value();
-            label = "B" + std::to_string(bi) + ": " + (bit ? "1" : "0");
+            label = "B" + std::to_string(bi) + ":" + (bit ? "1" : "0");
         }
-        int text_width = MeasureAppText(label.c_str(), FONT_SIZE_IO);
-        DrawAppText(label.c_str(), static_cast<int>(pos.x) - text_width / 2,
-                 static_cast<int>(pos.y) - FONT_SIZE_IO - 4, FONT_SIZE_IO, INPUT_LABEL_COLOR);
+
+        int text_width = MeasureAppText(label.c_str(), INPUT_FONT);
+        int label_y = static_cast<int>(pos.y) - INPUT_FONT - 4;
+
+        if (is_a) {
+            // Right-align: text ends at the dot
+            DrawAppText(label.c_str(), static_cast<int>(pos.x) - text_width - 2,
+                        label_y, INPUT_FONT, INPUT_LABEL_COLOR);
+        } else {
+            // Left-align: text starts at the dot
+            DrawAppText(label.c_str(), static_cast<int>(pos.x) + 2,
+                        label_y, INPUT_FONT, INPUT_LABEL_COLOR);
+        }
     }
 
     // Draw output dots and labels
