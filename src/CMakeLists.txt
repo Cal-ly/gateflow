@@ -65,6 +65,7 @@ if(EMSCRIPTEN)
     # Emscripten link flags for the main executable
     target_link_options(gateflow PRIVATE
         -sUSE_GLFW=3                     # Raylib uses GLFW
+        -sGL_ENABLE_GET_PROC_ADDRESS     # Enable glfwGetProcAddress() 
         -sALLOW_MEMORY_GROWTH=1          # Dynamic heap
         --shell-file ${WASM_SHELL}       # Custom HTML shell
     )
