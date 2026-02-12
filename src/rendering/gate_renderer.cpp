@@ -8,7 +8,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <string>
+#include <vector>
 
 namespace gateflow {
 
@@ -25,6 +27,20 @@ const Color LABEL_COLOR = {240, 240, 240, 255};           // Near-white
 const Color IO_DOT_COLOR = {200, 200, 50, 255};           // Yellow for I/O dots
 const Color INPUT_LABEL_COLOR = {180, 180, 255, 255};     // Light blue for input labels
 const Color OUTPUT_LABEL_COLOR = {255, 180, 180, 255};    // Light red for output labels
+const Color GROUP_BG_COLOR = {38, 38, 55, 170};           // subtle column grouping background
+const Color GROUP_BORDER_COLOR = {58, 58, 78, 220};
+
+const Color ACCENT_XOR = {70, 210, 220, 255};
+const Color ACCENT_AND = {255, 165, 70, 255};
+const Color ACCENT_OR = {240, 220, 90, 255};
+const Color ACCENT_NAND = {170, 120, 255, 255};
+const Color ACCENT_OTHER = {140, 140, 170, 255};
+const Color TOOLTIP_BG = {24, 24, 32, 245};
+const Color TOOLTIP_BORDER = {95, 95, 120, 255};
+const Color TOOLTIP_TITLE = {226, 226, 236, 255};
+const Color TOOLTIP_BODY = {190, 208, 228, 255};
+const Color TOOLTIP_ROW = {170, 170, 185, 255};
+const Color TOOLTIP_ROW_ACTIVE = {255, 225, 145, 255};
 
 constexpr float CORNER_ROUNDNESS = 0.3f; // Raylib roundness parameter (0.0–1.0)
 constexpr int CORNER_SEGMENTS = 4;
@@ -32,6 +48,7 @@ constexpr float OUTLINE_THICKNESS = 2.0f;
 constexpr int FONT_SIZE_GATE = 19;
 constexpr int FONT_SIZE_IO = 19;
 constexpr float IO_DOT_RADIUS = 4.0f;
+constexpr float GROUP_MARGIN = 0.6f;
 
 /// Converts a logical-unit rect to screen-space
 Rectangle to_screen(const Rect& r, float scale, Vector2 offset) {
@@ -58,10 +75,99 @@ Color with_alpha(Color c, float alpha) {
     return {c.r, c.g, c.b, a};
 }
 
+Color gate_type_accent(GateType type) {
+    switch (type) {
+    case GateType::XOR:
+        return ACCENT_XOR;
+    case GateType::AND:
+        return ACCENT_AND;
+    case GateType::OR:
+        return ACCENT_OR;
+    case GateType::NAND:
+        return ACCENT_NAND;
+    case GateType::NOT:
+    case GateType::BUFFER:
+        return ACCENT_OTHER;
+    }
+    return ACCENT_OTHER;
+}
+
+int rounded_x_bucket(float x) {
+    return static_cast<int>(std::round(x * 100.0f));
+}
+
 } // namespace
+
+void draw_adder_groups(const Circuit& circuit, const Layout& layout, float scale, Vector2 offset) {
+    if (circuit.num_inputs() % 2 != 0 || circuit.num_outputs() != circuit.num_inputs() / 2 + 1) {
+        return;
+    }
+
+    std::map<int, Rect> column_bounds;
+    for (const auto& [gate, rect] : layout.gate_positions) {
+        (void)gate;
+        int bucket = rounded_x_bucket(rect.x);
+        auto it = column_bounds.find(bucket);
+        if (it == column_bounds.end()) {
+            column_bounds[bucket] = rect;
+        } else {
+            Rect& b = it->second;
+            float min_x = std::min(b.x, rect.x);
+            float min_y = std::min(b.y, rect.y);
+            float max_x = std::max(b.x + b.w, rect.x + rect.w);
+            float max_y = std::max(b.y + b.h, rect.y + rect.h);
+            b = {min_x, min_y, max_x - min_x, max_y - min_y};
+        }
+    }
+
+    if (column_bounds.empty()) {
+        return;
+    }
+
+    // Sort columns right-to-left for bit indexing (Bit 0 at rightmost).
+    std::vector<Rect> columns;
+    columns.reserve(column_bounds.size());
+    for (const auto& [bucket, rect] : column_bounds) {
+        (void)bucket;
+        columns.push_back(rect);
+    }
+    std::sort(columns.begin(), columns.end(), [](const Rect& a, const Rect& b) { return a.x > b.x; });
+
+    for (size_t bit = 0; bit < columns.size(); bit++) {
+        Rect r = columns[bit];
+        r.x -= GROUP_MARGIN;
+        r.y -= (GROUP_MARGIN + 1.0f);
+        r.w += GROUP_MARGIN * 2.0f;
+        r.h += GROUP_MARGIN * 2.0f + 1.8f;
+
+        Rectangle sr = to_screen(r, scale, offset);
+        DrawRectangleRounded(sr, 0.15f, 4, GROUP_BG_COLOR);
+        DrawRectangleRoundedLines(sr, 0.15f, 4, 1.0f, GROUP_BORDER_COLOR);
+
+        std::string label = "Bit " + std::to_string(bit);
+        DrawText(label.c_str(), static_cast<int>(sr.x + 6), static_cast<int>(sr.y + 4), 14,
+                 {180, 180, 200, 240});
+    }
+
+    // Overflow (Cout) group near the final output pin.
+    if (!layout.output_positions.empty()) {
+        Vec2 cout = layout.output_positions.back();
+        Rect o = {cout.x - 1.7f, cout.y - 1.8f, 3.4f, 2.6f};
+        Rectangle so = to_screen(o, scale, offset);
+        DrawRectangleRounded(so, 0.2f, 4, {45, 45, 60, 170});
+        DrawRectangleRoundedLines(so, 0.2f, 4, 1.0f, {80, 80, 110, 220});
+        DrawText("Bit 7", static_cast<int>(so.x + 4), static_cast<int>(so.y + 3), 12,
+                 {210, 190, 130, 255});
+        DrawText("overflow", static_cast<int>(so.x + 4), static_cast<int>(so.y + 16), 10,
+                 {180, 170, 130, 255});
+    }
+}
 
 void draw_gates(const Circuit& circuit, const Layout& layout, const AnimationState& anim,
                 float scale, Vector2 offset) {
+    const Gate* hovered_gate = nullptr;
+    Rectangle hovered_rect = {0, 0, 0, 0};
+
     for (auto& gate_ptr : circuit.gates()) {
         const Gate* gate = gate_ptr.get();
         auto it = layout.gate_positions.find(gate);
@@ -106,6 +212,11 @@ void draw_gates(const Circuit& circuit, const Layout& layout, const AnimationSta
         DrawRectangleRoundedLines(screen_rect, CORNER_ROUNDNESS, CORNER_SEGMENTS, OUTLINE_THICKNESS,
                                   outline);
 
+        // Draw gate-type accent stripe for quick visual differentiation.
+        Color accent = with_alpha(gate_type_accent(gate->get_type()), std::max(alpha, 0.45f));
+        DrawRectangle(static_cast<int>(screen_rect.x), static_cast<int>(screen_rect.y), 4,
+                  static_cast<int>(screen_rect.height), accent);
+
         // Draw gate type label centered
         auto label_sv = gate_type_name(gate->get_type());
         const char* label = label_sv.data();
@@ -117,6 +228,119 @@ void draw_gates(const Circuit& circuit, const Layout& layout, const AnimationSta
         Color label_color = with_alpha(LABEL_COLOR, std::max(alpha, 0.2f));
         DrawText(label, static_cast<int>(text_x), static_cast<int>(text_y), FONT_SIZE_GATE,
                  label_color);
+
+        if (CheckCollisionPointRec(GetMousePosition(), screen_rect)) {
+            hovered_gate = gate;
+            hovered_rect = screen_rect;
+        }
+    }
+
+    if (hovered_gate != nullptr) {
+        std::vector<bool> in_vals;
+        in_vals.reserve(hovered_gate->get_inputs().size());
+        for (const Wire* w : hovered_gate->get_inputs()) {
+            in_vals.push_back(w->get_value());
+        }
+        bool out_val = false;
+        if (const Wire* out = hovered_gate->get_output(); out != nullptr) {
+            out_val = out->get_value();
+        }
+
+        std::vector<std::pair<std::string, bool>> rows;
+        auto add_row = [&](std::string row, bool highlight) {
+            rows.emplace_back(std::move(row), highlight);
+        };
+
+        bool a = in_vals.size() >= 1 ? in_vals[0] : false;
+        bool b = in_vals.size() >= 2 ? in_vals[1] : false;
+        switch (hovered_gate->get_type()) {
+        case GateType::XOR:
+            add_row("0,0 -> 0", !a && !b);
+            add_row("0,1 -> 1", !a && b);
+            add_row("1,0 -> 1", a && !b);
+            add_row("1,1 -> 0", a && b);
+            break;
+        case GateType::AND:
+            add_row("0,0 -> 0", !a && !b);
+            add_row("0,1 -> 0", !a && b);
+            add_row("1,0 -> 0", a && !b);
+            add_row("1,1 -> 1", a && b);
+            break;
+        case GateType::OR:
+            add_row("0,0 -> 0", !a && !b);
+            add_row("0,1 -> 1", !a && b);
+            add_row("1,0 -> 1", a && !b);
+            add_row("1,1 -> 1", a && b);
+            break;
+        case GateType::NAND:
+            add_row("0,0 -> 1", !a && !b);
+            add_row("0,1 -> 1", !a && b);
+            add_row("1,0 -> 1", a && !b);
+            add_row("1,1 -> 0", a && b);
+            break;
+        case GateType::NOT:
+            add_row("0 -> 1", !a);
+            add_row("1 -> 0", a);
+            break;
+        case GateType::BUFFER:
+            add_row("0 -> 0", !a);
+            add_row("1 -> 1", a);
+            break;
+        }
+
+        const float tip_width = 294.0f;
+        const float tip_height = 62.0f + static_cast<float>(rows.size()) * 16.0f;
+        Rectangle tip = {hovered_rect.x + hovered_rect.width + 10.0f, hovered_rect.y - 6.0f,
+                         tip_width, tip_height};
+
+        if (tip.x + tip.width > static_cast<float>(GetScreenWidth()) - 6.0f) {
+            tip.x = hovered_rect.x - tip.width - 10.0f;
+        }
+        tip.x = std::clamp(tip.x, 6.0f, static_cast<float>(GetScreenWidth()) - tip.width - 6.0f);
+        tip.y = std::clamp(tip.y, 6.0f,
+                           static_cast<float>(GetScreenHeight()) - tip.height - 6.0f);
+
+        Rectangle shadow = {tip.x + 2.0f, tip.y + 3.0f, tip.width, tip.height};
+        DrawRectangleRounded(shadow, 0.16f, 4, {0, 0, 0, 100});
+        DrawRectangleRounded(tip, 0.16f, 4, TOOLTIP_BG);
+        DrawRectangleRoundedLines(tip, 0.16f, 4, 1.0f, TOOLTIP_BORDER);
+
+        Color accent = gate_type_accent(hovered_gate->get_type());
+        DrawRectangle(static_cast<int>(tip.x), static_cast<int>(tip.y), static_cast<int>(tip.width),
+                      18, with_alpha(accent, 0.20f));
+        DrawRectangle(static_cast<int>(tip.x), static_cast<int>(tip.y), static_cast<int>(tip.width),
+                      3, with_alpha(accent, 0.85f));
+
+        std::string title = std::string(gate_type_name(hovered_gate->get_type())) + " gate";
+        DrawText(title.c_str(), static_cast<int>(tip.x + 10), static_cast<int>(tip.y + 8), 14,
+                 TOOLTIP_TITLE);
+
+        std::string io = "in: ";
+        for (size_t i = 0; i < in_vals.size(); i++) {
+            io += (in_vals[i] ? '1' : '0');
+            if (i + 1 < in_vals.size()) {
+                io += ", ";
+            }
+        }
+        io += "   out: ";
+        io += out_val ? '1' : '0';
+        DrawText(io.c_str(), static_cast<int>(tip.x + 10), static_cast<int>(tip.y + 29), 13,
+                 TOOLTIP_BODY);
+
+        DrawLine(static_cast<int>(tip.x + 8), static_cast<int>(tip.y + 46),
+                 static_cast<int>(tip.x + tip.width - 8), static_cast<int>(tip.y + 46),
+                 with_alpha(accent, 0.35f));
+
+        int y = static_cast<int>(tip.y + 50);
+        for (const auto& [text, highlight] : rows) {
+            if (highlight) {
+                DrawRectangle(static_cast<int>(tip.x + 8), y - 1, static_cast<int>(tip.width - 16),
+                              14, with_alpha(accent, 0.28f));
+            }
+            DrawText(text.c_str(), static_cast<int>(tip.x + 12), y, 12,
+                     highlight ? TOOLTIP_ROW_ACTIVE : TOOLTIP_ROW);
+            y += 16;
+        }
     }
 }
 
@@ -132,9 +356,12 @@ void draw_io_labels(const Circuit& circuit, const Layout& layout, float scale, V
         // Label: A0, A1, ... or B0, B1, ...
         std::string label;
         if (static_cast<int>(i) < bits) {
-            label = "A" + std::to_string(i);
+            bool bit = circuit.input_wires()[i]->get_value();
+            label = "A" + std::to_string(i) + ": " + (bit ? "1" : "0");
         } else {
-            label = "B" + std::to_string(static_cast<int>(i) - bits);
+            size_t bi = i - static_cast<size_t>(bits);
+            bool bit = circuit.input_wires()[i]->get_value();
+            label = "B" + std::to_string(bi) + ": " + (bit ? "1" : "0");
         }
         int text_width = MeasureText(label.c_str(), FONT_SIZE_IO);
         DrawText(label.c_str(), static_cast<int>(pos.x) - text_width / 2,
@@ -150,9 +377,11 @@ void draw_io_labels(const Circuit& circuit, const Layout& layout, float scale, V
         // Label: S0, S1, ... or Cout
         std::string label;
         if (static_cast<int>(i) < num_outputs - 1) {
-            label = "S" + std::to_string(i);
+            bool bit = circuit.output_wires()[i]->get_value();
+            label = "S" + std::to_string(i) + ": " + (bit ? "1" : "0");
         } else {
-            label = "Cout";
+            bool bit = circuit.output_wires()[i]->get_value();
+            label = std::string("Cout: ") + (bit ? "1" : "0");
         }
         DrawText(label.c_str(),
                  static_cast<int>(pos.x) - MeasureText(label.c_str(), FONT_SIZE_IO) / 2,

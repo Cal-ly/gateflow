@@ -11,6 +11,13 @@
 
 namespace gateflow {
 
+/// Draws subtle structural grouping for ripple-carry adder columns.
+/// @param circuit The circuit
+/// @param layout  Precomputed positions
+/// @param scale   Pixels per logical unit
+/// @param offset  Screen-space offset
+void draw_adder_groups(const Circuit& circuit, const Layout& layout, float scale, Vector2 offset);
+
 /// Draws all gates with animation state (pending/resolved/active coloring).
 /// @param circuit The circuit whose gates are drawn
 /// @param layout  Precomputed positions for gates and wires

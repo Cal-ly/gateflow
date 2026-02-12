@@ -30,7 +30,13 @@ float draw_info_panel(const Circuit& circuit, const PropagationScheduler& schedu
 /// @param panel_x Left edge of panel in screen coords
 /// @param panel_y Top edge of panel in screen coords
 /// @param panel_w Width of the panel
+/// @param scheduler The propagation scheduler (for dynamic context text)
+/// @param input_a Decimal value of input A
+/// @param input_b Decimal value of input B
+/// @param result Current computed result
 /// @return Rendered panel height.
-float draw_explanation_panel(float panel_x, float panel_y, float panel_w);
+float draw_explanation_panel(float panel_x, float panel_y, float panel_w,
+                             const PropagationScheduler& scheduler, int input_a, int input_b,
+                             int result);
 
 } // namespace gateflow

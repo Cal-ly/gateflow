@@ -207,6 +207,7 @@ void frame_tick(FrameState& state) {
     ClearBackground({25, 25, 30, 255});
 
     // Draw circuit in the main area (left of the UI panels)
+    gateflow::draw_adder_groups(*app.circuit, app.layout, app.scale, app.offset);
     gateflow::draw_wires(*app.circuit, app.layout, *app.anim, app.scale, app.offset);
     gateflow::draw_gates(*app.circuit, app.layout, *app.anim, app.scale, app.offset);
     gateflow::draw_io_labels(*app.circuit, app.layout, app.scale, app.offset);
@@ -219,6 +220,24 @@ void frame_tick(FrameState& state) {
     DrawText(title.c_str(),
              static_cast<int>((circuit_area_w - static_cast<float>(title_width)) / 2.0f), 12, 24,
              {240, 240, 240, 255});
+
+    // Global propagation progress bar
+    float progress = 0.0f;
+    if (app.scheduler->max_depth() >= 0) {
+        progress = std::clamp(app.scheduler->current_depth() /
+                                  static_cast<float>(app.scheduler->max_depth() + 1),
+                              0.0f, 1.0f);
+    }
+    Rectangle progress_track = {12.0f, 44.0f, circuit_area_w - 24.0f, 10.0f};
+    DrawRectangleRounded(progress_track, 0.35f, 4, {45, 45, 55, 255});
+    Rectangle progress_fill = progress_track;
+    progress_fill.width *= progress;
+    DrawRectangleRounded(progress_fill, 0.35f, 4, {70, 180, 255, 220});
+
+    std::string progress_text =
+        "Propagation depth " + std::to_string(static_cast<int>(app.scheduler->current_depth())) +
+        "/" + std::to_string(app.scheduler->max_depth());
+    DrawText(progress_text.c_str(), 14, 57, 12, {155, 165, 180, 230});
 
     // --- Right-side UI panels ---
     float panel_x = static_cast<float>(screen_w) - UI_PANEL_WIDTH - UI_MARGIN;
@@ -236,7 +255,8 @@ void frame_tick(FrameState& state) {
 
     // Explanation panel (below result panel)
     float expl_y = info_panel_y + info_panel_h + 10.0f;
-    gateflow::draw_explanation_panel(panel_x, expl_y, UI_PANEL_WIDTH);
+    gateflow::draw_explanation_panel(panel_x, expl_y, UI_PANEL_WIDTH, *app.scheduler, ui.input_a,
+                                     ui.input_b, app.result);
 
     // --- HUD: mode, depth, NAND indicator ---
     const char* mode_str = mode_label(app.scheduler->mode());

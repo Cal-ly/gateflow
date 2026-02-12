@@ -3,11 +3,14 @@
 
 #include "ui/info_panel.hpp"
 
+#include "simulation/gate.hpp"
+
 #include <algorithm>
 #include <cstdio>
 #include <sstream>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace gateflow {
 
@@ -39,6 +42,8 @@ const Color RESULT_COLOR = {80, 220, 130, 255};
 const Color STATUS_COLOR = {180, 180, 100, 255};
 const Color EXPL_LABEL_COLOR = {200, 200, 220, 255};
 const Color EXPL_TEXT_COLOR = {190, 190, 205, 255};
+const Color CARRY_OK_COLOR = {90, 220, 120, 255};
+const Color CARRY_PENDING_COLOR = {220, 200, 120, 255};
 
 /// Draws wrapped text and returns consumed height.
 float draw_wrapped_text(const std::string& text, float x, float y, float max_width, int font_size,
@@ -128,58 +133,67 @@ float measure_wrapped_text_ex(const std::string& text, float max_width, float fo
     return height;
 }
 
-/// Draw a row of binary bits with resolved/pending coloring.
-/// @param label  Row label (e.g. "A =")
-/// @param value  The integer value to show in binary
-/// @param bits   Number of bits
-/// @param x, y   Position
-/// @param scheduler  For checking which output bits are resolved (nullptr to show all resolved)
-/// @param circuit    The circuit (for output wire queries, nullptr to show all resolved)
-/// @param is_output  If true, color bits based on output wire resolution status
-/// @param output_offset  Starting output wire index for bit resolution check
-void draw_binary_row(const char* label, int value, int bits, float x, float y,
-                     const PropagationScheduler* scheduler, const Circuit* circuit, bool is_output,
-                     int output_offset) {
-    DrawText(label, static_cast<int>(x), static_cast<int>(y), FONT_SIZE, LABEL_COLOR);
+std::vector<const Wire*> collect_carry_wires(const Circuit& circuit) {
+    std::vector<const Wire*> carries;
+    for (const auto& wire_ptr : circuit.wires()) {
+        const Wire* wire = wire_ptr.get();
+        const Gate* src = wire->get_source();
+        if (src == nullptr) {
+            continue;
+        }
 
-    float bit_x = x + 40.0f;
-    // Draw bits MSB first (left to right = high bit to low bit)
-    for (int i = bits - 1; i >= 0; i--) {
-        bool bit_val = (value >> i) & 1;
-        bool resolved = true;
+        if (src->get_type() == GateType::OR) {
+            carries.push_back(wire);
+            continue;
+        }
 
-        if (is_output && scheduler != nullptr && circuit != nullptr) {
-            // Check if this output bit's wire is resolved
-            int wire_idx = output_offset + i;
-            if (wire_idx < static_cast<int>(circuit->output_wires().size())) {
-                resolved = scheduler->is_wire_resolved(circuit->output_wires()[wire_idx]);
+        if (src->get_type() == GateType::AND) {
+            bool has_xor_dest = false;
+            bool has_and_dest = false;
+            for (const Gate* dest : wire->get_destinations()) {
+                if (dest->get_type() == GateType::XOR) {
+                    has_xor_dest = true;
+                } else if (dest->get_type() == GateType::AND) {
+                    has_and_dest = true;
+                }
+            }
+            if (has_xor_dest && has_and_dest) {
+                carries.push_back(wire);
             }
         }
-
-        Color bit_color;
-        if (!resolved) {
-            bit_color = BIT_PENDING;
-        } else if (bit_val) {
-            bit_color = BIT_RESOLVED_ONE;
-        } else {
-            bit_color = BIT_RESOLVED_ZERO;
-        }
-
-        char bit_char[2] = {bit_val ? '1' : '0', '\0'};
-        if (!resolved) {
-            bit_char[0] = '?';
-        }
-        DrawText(bit_char, static_cast<int>(bit_x), static_cast<int>(y), FONT_SIZE, bit_color);
-        bit_x += 14.0f;
     }
 
-    // Decimal value after the binary
-    if (!is_output || (scheduler != nullptr && scheduler->is_complete())) {
-        char dec_str[16];
-        std::snprintf(dec_str, sizeof(dec_str), " = %d", value);
-        DrawText(dec_str, static_cast<int>(bit_x + 4.0f), static_cast<int>(y), FONT_SIZE,
-                 TEXT_COLOR);
+    std::sort(carries.begin(), carries.end(), [](const Wire* a, const Wire* b) {
+        const Gate* sa = a->get_source();
+        const Gate* sb = b->get_source();
+        if (sa == nullptr || sb == nullptr) {
+            return a->get_id() < b->get_id();
+        }
+        return sa->get_id() < sb->get_id();
+    });
+
+    return carries;
+}
+
+std::string whats_happening_now(const PropagationScheduler& scheduler, int input_a, int input_b,
+                                int result) {
+    if (scheduler.current_depth() < 0.0f) {
+        return "Enter two numbers (0-99) and press Run. Signals will enter each bit column and start addition at Bit 0.";
     }
+
+    if (scheduler.is_complete()) {
+        return "Complete: " + std::to_string(input_a) + " + " + std::to_string(input_b) + " = " +
+               std::to_string(result) + ". All sum bits and carries are now stable.";
+    }
+
+    int depth = static_cast<int>(scheduler.current_depth());
+    int approx_bit = std::min(6, std::max(0, depth / 3));
+    if (depth <= 1) {
+        return "Bit 0 is resolving: XOR computes the sum bit, AND computes the first carry.";
+    }
+
+    return "Carry is propagating into Bit " + std::to_string(approx_bit) +
+           ". Ripple-carry adders wait for this chain, so larger adders take longer.";
 }
 
 /// Generate a human-readable status message based on current propagation depth
@@ -228,22 +242,77 @@ float draw_info_panel(const Circuit& circuit, const PropagationScheduler& schedu
     DrawText("RESULT", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE, TEXT_COLOR);
     cy += ROW_HEIGHT + 4.0f;
 
-    // Binary A — inputs are always resolved
-    draw_binary_row("A:", input_a, NUM_BITS, cx, cy, nullptr, nullptr, false, 0);
-    cy += ROW_HEIGHT;
+    // Weighted binary columns
+    const int weights[NUM_BITS] = {64, 32, 16, 8, 4, 2, 1};
+    float bit_x0 = cx + 56.0f;
+    float bit_step = 28.0f;
 
-    // Binary B — inputs are always resolved
-    draw_binary_row("B:", input_b, NUM_BITS, cx, cy, nullptr, nullptr, false, 0);
-    cy += ROW_HEIGHT + 2.0f;
+    for (int i = 0; i < NUM_BITS; i++) {
+        std::string w = std::to_string(weights[i]);
+        DrawText(w.c_str(), static_cast<int>(bit_x0 + i * bit_step), static_cast<int>(cy),
+                 FONT_SIZE_SMALL, LABEL_COLOR);
+    }
+    cy += ROW_HEIGHT - 2.0f;
+
+    auto draw_bits_row = [&](const char* row_label, int value, bool output_row) {
+        DrawText(row_label, static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE, LABEL_COLOR);
+        for (int i = 0; i < NUM_BITS; i++) {
+            int bit_idx = NUM_BITS - 1 - i;
+            bool bit_val = ((value >> bit_idx) & 1) != 0;
+            bool resolved = true;
+            if (output_row && bit_idx < static_cast<int>(circuit.output_wires().size())) {
+                resolved = scheduler.is_wire_resolved(circuit.output_wires()[bit_idx]);
+            }
+
+            std::string glyph = resolved ? (bit_val ? "1" : "0") : "·";
+            Color c = !resolved ? BIT_PENDING : (bit_val ? BIT_RESOLVED_ONE : BIT_RESOLVED_ZERO);
+            DrawText(glyph.c_str(), static_cast<int>(bit_x0 + i * bit_step), static_cast<int>(cy),
+                     FONT_SIZE, c);
+        }
+
+        if (!output_row || scheduler.is_complete()) {
+            std::string dec = "= " + std::to_string(value);
+            DrawText(dec.c_str(), static_cast<int>(bit_x0 + NUM_BITS * bit_step + 8),
+                     static_cast<int>(cy), FONT_SIZE, TEXT_COLOR);
+        }
+        cy += ROW_HEIGHT;
+    };
+
+    draw_bits_row("A:", input_a, false);
+    draw_bits_row("B:", input_b, false);
 
     // Separator line
     DrawLine(static_cast<int>(cx), static_cast<int>(cy),
              static_cast<int>(cx + panel_w - 2 * PADDING), static_cast<int>(cy), BORDER_COLOR);
-    cy += 6.0f;
+    cy += 8.0f;
 
-    // Binary Sum — bits resolve progressively
-    draw_binary_row("S:", result, NUM_BITS + 1, cx, cy, &scheduler, &circuit, true, 0);
-    cy += ROW_HEIGHT + 6.0f;
+    draw_bits_row("S:", result, true);
+
+    bool cout_resolved = scheduler.is_complete();
+    bool cout_val = circuit.get_output(NUM_BITS);
+    std::string cout_txt = std::string("Cout: ") + (cout_resolved ? (cout_val ? "1" : "0") : "·");
+    DrawText(cout_txt.c_str(), static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE,
+             cout_resolved ? (cout_val ? BIT_RESOLVED_ONE : BIT_RESOLVED_ZERO) : BIT_PENDING);
+    cy += ROW_HEIGHT;
+
+    std::vector<const Wire*> carries = collect_carry_wires(circuit);
+    if (!carries.empty()) {
+        DrawText("Carry:", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE_SMALL,
+                 LABEL_COLOR);
+        float ccx = cx + 60.0f;
+        for (size_t i = 0; i < carries.size(); i++) {
+            bool resolved = scheduler.is_wire_resolved(carries[i]);
+            std::string token = "C" + std::to_string(i) + (resolved ? " ✓" : " →");
+            DrawText(token.c_str(), static_cast<int>(ccx), static_cast<int>(cy), FONT_SIZE_SMALL,
+                     resolved ? CARRY_OK_COLOR : CARRY_PENDING_COLOR);
+            ccx += static_cast<float>(MeasureText(token.c_str(), FONT_SIZE_SMALL)) + 8.0f;
+            if (ccx > panel_x + panel_w - 80.0f) {
+                ccx = cx + 60.0f;
+                cy += ROW_HEIGHT - 4.0f;
+            }
+        }
+        cy += ROW_HEIGHT - 2.0f;
+    }
 
     // Decimal result (only shown when complete)
     if (scheduler.is_complete()) {
@@ -252,7 +321,7 @@ float draw_info_panel(const Circuit& circuit, const PropagationScheduler& schedu
         DrawText(result_str, static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE_BIG,
                  RESULT_COLOR);
     }
-    cy += ROW_HEIGHT + 4.0f;
+    cy += ROW_HEIGHT + 2.0f;
 
     // Status text (wrapped to panel width)
     std::string status = propagation_status(scheduler);
@@ -262,15 +331,17 @@ float draw_info_panel(const Circuit& circuit, const PropagationScheduler& schedu
     return panel_h;
 }
 
-float draw_explanation_panel(float panel_x, float panel_y, float panel_w) {
+float draw_explanation_panel(float panel_x, float panel_y, float panel_w,
+                             const PropagationScheduler& scheduler, int input_a, int input_b,
+                             int result) {
     static float scroll_target = 0.0f;
     static float scroll_current = 0.0f;
+    static bool show_reference = true;
 
     float cx = panel_x + PADDING;
     float cy = panel_y + PADDING;
     float text_w = panel_w - 2.0f * PADDING;
-    float content_top = cy + ROW_HEIGHT;
-    float viewport_h = EXPLANATION_PANEL_HEIGHT - (PADDING * 2.0f + ROW_HEIGHT);
+    float viewport_h = EXPLANATION_PANEL_HEIGHT - (PADDING * 2.0f + ROW_HEIGHT + 110.0f);
 
     DrawRectangleRec({panel_x, panel_y, panel_w, EXPLANATION_PANEL_HEIGHT}, BG_COLOR);
     DrawRectangleLinesEx({panel_x, panel_y, panel_w, EXPLANATION_PANEL_HEIGHT}, 1.0f,
@@ -279,6 +350,31 @@ float draw_explanation_panel(float panel_x, float panel_y, float panel_w) {
     DrawText("EXPLANATION", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE,
              EXPL_LABEL_COLOR);
     cy += ROW_HEIGHT;
+
+    // Section A: dynamic context
+    DrawText("What's happening now", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE,
+             {220, 220, 130, 255});
+    cy += ROW_HEIGHT - 4.0f;
+    cy += draw_wrapped_text_ex(whats_happening_now(scheduler, input_a, input_b, result), cx, cy,
+                               text_w, EXPL_FONT_SIZE + 1.0f, EXPL_FONT_SPACING,
+                               {225, 225, 205, 255}, EXPL_LINE_GAP);
+    cy += 8.0f;
+
+    Rectangle toggle_rect = {cx, cy, text_w, 22.0f};
+    if (CheckCollisionPointRec(GetMousePosition(), toggle_rect) &&
+        IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        show_reference = !show_reference;
+    }
+    std::string toggle = std::string(show_reference ? "▼ " : "▶ ") + "How it works";
+    DrawText(toggle.c_str(), static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE,
+             {180, 205, 240, 255});
+    cy += ROW_HEIGHT;
+
+    if (!show_reference) {
+        return EXPLANATION_PANEL_HEIGHT;
+    }
+
+    float content_top = cy;
 
     const std::string lines[] = {
         "What you are seeing: an adder built from logic gates. Signals travel from inputs to outputs over time.",

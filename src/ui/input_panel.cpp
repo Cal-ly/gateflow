@@ -212,6 +212,13 @@ bool draw_slider(const char* label, float& value, float min_val, float max_val, 
     return changed;
 }
 
+void sync_input_buffers(UIState& state) {
+    std::snprintf(state.buf_a, sizeof(state.buf_a), "%d", state.input_a);
+    std::snprintf(state.buf_b, sizeof(state.buf_b), "%d", state.input_b);
+    state.cursor_a = static_cast<int>(std::strlen(state.buf_a));
+    state.cursor_b = static_cast<int>(std::strlen(state.buf_b));
+}
+
 } // namespace
 
 InputPanelResult draw_input_panel(UIState& state, float panel_x, float panel_y, float panel_w) {
@@ -224,8 +231,10 @@ InputPanelResult draw_input_panel(UIState& state, float panel_x, float panel_y, 
     measure_y += ROW_HEIGHT;                      // Title row
     measure_y += ROW_HEIGHT + ROW_GAP;            // Input A
     measure_y += ROW_HEIGHT + ROW_GAP + 4.0f;     // Input B
+    measure_y += BUTTON_HEIGHT + ROW_GAP;          // +/- quick adjust row
     measure_y += BUTTON_HEIGHT + ROW_GAP + 4.0f;  // Button row
     measure_y += ROW_HEIGHT + SLIDER_HEIGHT + ROW_GAP; // Slider block
+    measure_y += BUTTON_HEIGHT + ROW_GAP;          // Preset row
     measure_y += BUTTON_HEIGHT;                   // NAND toggle
     result.panel_height = (measure_y + PADDING) - panel_y;
 
@@ -255,6 +264,33 @@ InputPanelResult draw_input_panel(UIState& state, float panel_x, float panel_y, 
     }
     cy += ROW_HEIGHT + ROW_GAP + 4.0f;
 
+    // Quick adjust row (+/-)
+    float qa_w = (content_w - 3.0f * 4.0f) / 4.0f;
+    if (draw_button("A-", cx, cy, qa_w, BUTTON_HEIGHT, BUTTON_BG, BUTTON_BG_HOVER)) {
+        state.input_a = std::max(0, state.input_a - 1);
+        sync_input_buffers(state);
+        action.inputs_changed = true;
+    }
+    if (draw_button("A+", cx + (qa_w + 4.0f), cy, qa_w, BUTTON_HEIGHT, BUTTON_BG,
+                    BUTTON_BG_HOVER)) {
+        state.input_a = std::min(99, state.input_a + 1);
+        sync_input_buffers(state);
+        action.inputs_changed = true;
+    }
+    if (draw_button("B-", cx + 2.0f * (qa_w + 4.0f), cy, qa_w, BUTTON_HEIGHT, BUTTON_BG,
+                    BUTTON_BG_HOVER)) {
+        state.input_b = std::max(0, state.input_b - 1);
+        sync_input_buffers(state);
+        action.inputs_changed = true;
+    }
+    if (draw_button("B+", cx + 3.0f * (qa_w + 4.0f), cy, qa_w, BUTTON_HEIGHT, BUTTON_BG,
+                    BUTTON_BG_HOVER)) {
+        state.input_b = std::min(99, state.input_b + 1);
+        sync_input_buffers(state);
+        action.inputs_changed = true;
+    }
+    cy += BUTTON_HEIGHT + ROW_GAP;
+
     // Button row: Run | Pause | Step | Reset
     float btn_w = (content_w - 3.0f * 4.0f) / 4.0f;
     if (draw_button("Run", cx, cy, btn_w, BUTTON_HEIGHT, BUTTON_BG_ACTIVE, BUTTON_BG_HOVER)) {
@@ -280,6 +316,30 @@ InputPanelResult draw_input_panel(UIState& state, float panel_x, float panel_y, 
         action.speed_changed = true;
     }
     cy += ROW_HEIGHT + SLIDER_HEIGHT + ROW_GAP;
+
+    // Educational presets row
+    float p_w = (content_w - 2.0f * 4.0f) / 3.0f;
+    if (draw_button("99+99", cx, cy, p_w, BUTTON_HEIGHT, BUTTON_BG, BUTTON_BG_HOVER)) {
+        state.input_a = 99;
+        state.input_b = 99;
+        sync_input_buffers(state);
+        action.inputs_changed = true;
+    }
+    if (draw_button("P2", cx + (p_w + 4.0f), cy, p_w, BUTTON_HEIGHT, BUTTON_BG,
+                    BUTTON_BG_HOVER)) {
+        state.input_a = 64;
+        state.input_b = 32;
+        sync_input_buffers(state);
+        action.inputs_changed = true;
+    }
+    if (draw_button("63+1", cx + 2.0f * (p_w + 4.0f), cy, p_w, BUTTON_HEIGHT, BUTTON_BG,
+                    BUTTON_BG_HOVER)) {
+        state.input_a = 63;
+        state.input_b = 1;
+        sync_input_buffers(state);
+        action.inputs_changed = true;
+    }
+    cy += BUTTON_HEIGHT + ROW_GAP;
 
     // NAND toggle
     if (draw_toggle(state.show_nand ? "NAND View: ON" : "NAND View: OFF", state.show_nand, cx, cy,
