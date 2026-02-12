@@ -25,45 +25,42 @@ Vector2 to_screen(Vec2 v, float scale, Vector2 offset) {
     return {v.x * scale + offset.x, v.y * scale + offset.y};
 }
 
-/// Compute the total length of a polyline path
-float path_length(const std::vector<Vec2>& path) {
-    float len = 0.0f;
-    for (size_t i = 0; i + 1 < path.size(); i++) {
-        float dx = path[i + 1].x - path[i].x;
-        float dy = path[i + 1].y - path[i].y;
-        len += std::sqrt(dx * dx + dy * dy);
-    }
-    return len;
-}
-
-/// Interpolate a position along a polyline path at a given fraction (0.0–1.0)
-Vec2 lerp_along_path(const std::vector<Vec2>& path, float t) {
-    if (path.empty()) {
+/// Interpolate a position along a precomputed wire path at fraction [0, 1].
+Vec2 lerp_along_path(const WirePath& path, float t) {
+    if (path.points.empty()) {
         return {0.0f, 0.0f};
     }
-    if (t <= 0.0f) {
-        return path.front();
+    if (t <= 0.0f || path.total_length <= 0.0f || path.points.size() < 2) {
+        return path.points.front();
     }
     if (t >= 1.0f) {
-        return path.back();
+        return path.points.back();
     }
 
-    float total = path_length(path);
-    float target_dist = t * total;
-    float accumulated = 0.0f;
+    float target_dist = t * path.total_length;
 
-    for (size_t i = 0; i + 1 < path.size(); i++) {
-        float dx = path[i + 1].x - path[i].x;
-        float dy = path[i + 1].y - path[i].y;
-        float seg_len = std::sqrt(dx * dx + dy * dy);
-
-        if (accumulated + seg_len >= target_dist) {
-            float frac = (seg_len > 0.001f) ? (target_dist - accumulated) / seg_len : 0.0f;
-            return {path[i].x + dx * frac, path[i].y + dy * frac};
+    for (size_t i = 0; i + 1 < path.points.size(); i++) {
+        float seg_start = path.cumulative_lengths[i];
+        float seg_end = path.cumulative_lengths[i + 1];
+        if (target_dist <= seg_end) {
+            float seg_len = seg_end - seg_start;
+            float frac = (seg_len > 0.001f) ? (target_dist - seg_start) / seg_len : 0.0f;
+            float dx = path.points[i + 1].x - path.points[i].x;
+            float dy = path.points[i + 1].y - path.points[i].y;
+            return {path.points[i].x + dx * frac, path.points[i].y + dy * frac};
         }
-        accumulated += seg_len;
     }
-    return path.back();
+
+    return path.points.back();
+}
+
+void draw_polyline(const std::vector<Vec2>& points, float scale, Vector2 offset, float thickness,
+                   Color color) {
+    for (size_t i = 0; i + 1 < points.size(); i++) {
+        Vector2 from = to_screen(points[i], scale, offset);
+        Vector2 to = to_screen(points[i + 1], scale, offset);
+        DrawLineEx(from, to, thickness, color);
+    }
 }
 
 } // namespace
@@ -77,8 +74,8 @@ void draw_wires(const Circuit& circuit, const Layout& layout, const AnimationSta
             continue;
         }
 
-        const auto& path = it->second;
-        if (path.size() < 2) {
+        const auto& branches = it->second;
+        if (branches.empty()) {
             continue;
         }
 
@@ -93,48 +90,53 @@ void draw_wires(const Circuit& circuit, const Layout& layout, const AnimationSta
                 // Signal is traveling along this wire — draw the resolved portion
                 // in the active/inactive color and the rest as pending
 
-                // Draw the full wire as pending first
-                for (size_t i = 0; i + 1 < path.size(); i++) {
-                    Vector2 from = to_screen(path[i], scale, offset);
-                    Vector2 to = to_screen(path[i + 1], scale, offset);
-                    DrawLineEx(from, to, WIRE_PENDING_THICKNESS, WIRE_PENDING_COLOR);
-                }
-
                 // Draw the resolved portion on top
                 Color resolved_color = active ? WIRE_ACTIVE_COLOR : WIRE_INACTIVE_COLOR;
                 float resolved_thickness = active ? WIRE_ACTIVE_THICKNESS : WIRE_INACTIVE_THICKNESS;
 
-                // Draw segments up to the signal position
-                float total = path_length(path);
-                float target_dist = wa.signal_progress * total;
-                float accumulated = 0.0f;
-
-                for (size_t i = 0; i + 1 < path.size(); i++) {
-                    float dx = path[i + 1].x - path[i].x;
-                    float dy = path[i + 1].y - path[i].y;
-                    float seg_len = std::sqrt(dx * dx + dy * dy);
-
-                    if (accumulated + seg_len <= target_dist) {
-                        // Full segment is resolved
-                        Vector2 from = to_screen(path[i], scale, offset);
-                        Vector2 to = to_screen(path[i + 1], scale, offset);
-                        DrawLineEx(from, to, resolved_thickness, resolved_color);
-                    } else if (accumulated < target_dist) {
-                        // Partial segment
-                        float frac =
-                            (seg_len > 0.001f) ? (target_dist - accumulated) / seg_len : 0.0f;
-                        Vec2 mid = {path[i].x + dx * frac, path[i].y + dy * frac};
-                        Vector2 from = to_screen(path[i], scale, offset);
-                        Vector2 to = to_screen(mid, scale, offset);
-                        DrawLineEx(from, to, resolved_thickness, resolved_color);
+                for (const WirePath& branch : branches) {
+                    if (branch.points.size() < 2) {
+                        continue;
                     }
-                    accumulated += seg_len;
-                }
 
-                // Draw signal pulse dot at the wavefront
-                Vec2 pulse_pos = lerp_along_path(path, wa.signal_progress);
-                Vector2 pulse_screen = to_screen(pulse_pos, scale, offset);
-                DrawCircleV(pulse_screen, SIGNAL_PULSE_RADIUS, WIRE_SIGNAL_GLOW);
+                    // Draw the full branch as pending first
+                    draw_polyline(branch.points, scale, offset, WIRE_PENDING_THICKNESS,
+                                  WIRE_PENDING_COLOR);
+
+                    // Draw segments up to the signal position
+                    float target_dist = wa.signal_progress * branch.total_length;
+
+                    for (size_t i = 0; i + 1 < branch.points.size(); i++) {
+                        float seg_start = branch.cumulative_lengths[i];
+                        float seg_end = branch.cumulative_lengths[i + 1];
+
+                        if (seg_end <= target_dist) {
+                            // Full segment is resolved
+                            Vector2 from = to_screen(branch.points[i], scale, offset);
+                            Vector2 to = to_screen(branch.points[i + 1], scale, offset);
+                            DrawLineEx(from, to, resolved_thickness, resolved_color);
+                        } else if (seg_start < target_dist) {
+                            // Partial segment
+                            float seg_len = seg_end - seg_start;
+                            float frac =
+                                (seg_len > 0.001f) ? (target_dist - seg_start) / seg_len : 0.0f;
+                            float dx = branch.points[i + 1].x - branch.points[i].x;
+                            float dy = branch.points[i + 1].y - branch.points[i].y;
+                            Vec2 mid = {
+                                branch.points[i].x + dx * frac,
+                                branch.points[i].y + dy * frac,
+                            };
+                            Vector2 from = to_screen(branch.points[i], scale, offset);
+                            Vector2 to = to_screen(mid, scale, offset);
+                            DrawLineEx(from, to, resolved_thickness, resolved_color);
+                        }
+                    }
+
+                    // Draw signal pulse dot at the wavefront for each branch
+                    Vec2 pulse_pos = lerp_along_path(branch, wa.signal_progress);
+                    Vector2 pulse_screen = to_screen(pulse_pos, scale, offset);
+                    DrawCircleV(pulse_screen, SIGNAL_PULSE_RADIUS, WIRE_SIGNAL_GLOW);
+                }
 
                 continue; // Skip the normal drawing below
             }
@@ -148,18 +150,20 @@ void draw_wires(const Circuit& circuit, const Layout& layout, const AnimationSta
             thickness = active ? WIRE_ACTIVE_THICKNESS : WIRE_INACTIVE_THICKNESS;
         }
 
-        // Draw polyline segments
-        for (size_t i = 0; i + 1 < path.size(); i++) {
-            Vector2 from = to_screen(path[i], scale, offset);
-            Vector2 to = to_screen(path[i + 1], scale, offset);
-            DrawLineEx(from, to, thickness, color);
-        }
+        for (const WirePath& branch : branches) {
+            if (branch.points.size() < 2) {
+                continue;
+            }
 
-        // Draw small dot at each waypoint for visual clarity (only for resolved wires)
-        if (wa.resolved) {
-            for (size_t i = 1; i + 1 < path.size(); i++) {
-                Vector2 pt = to_screen(path[i], scale, offset);
-                DrawCircleV(pt, thickness * 0.8f, color);
+            // Draw polyline segments
+            draw_polyline(branch.points, scale, offset, thickness, color);
+
+            // Draw small dot at each waypoint for visual clarity (only for resolved wires)
+            if (wa.resolved) {
+                for (size_t i = 1; i + 1 < branch.points.size(); i++) {
+                    Vector2 pt = to_screen(branch.points[i], scale, offset);
+                    DrawCircleV(pt, thickness * 0.8f, color);
+                }
             }
         }
     }

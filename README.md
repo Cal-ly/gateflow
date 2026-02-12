@@ -10,13 +10,13 @@ Enter two numbers (0–99), press **Run**, and watch signals propagate through a
 
 ## Features
 
-- 🔢 **Two numeric inputs** (0–99) with instant circuit re-propagation
-- ⚡ **Animated signal flow** — signals travel gate-by-gate through the carry chain
-- 🔀 **NAND decomposition toggle** — see the same adder built entirely from NAND gates
-- ⏯️ **Playback controls** — Run, Pause, Step, Reset, adjustable speed slider
-- 📊 **Binary readouts** — live bit-by-bit resolution of inputs and sum with pending/resolved coloring
-- ⌨️ **Keyboard shortcuts** — Space (pause/play), → (step), R (reset)
-- 🌐 **Runs in browser** — compiled to WebAssembly via Emscripten, ~200 KB WASM
+- **Two numeric inputs** (0–99) with instant circuit re-propagation
+- **Animated signal flow** — signals travel gate-by-gate through the carry chain
+- **NAND decomposition toggle** — see the same adder built entirely from NAND gates
+- **Playback controls** — Run, Pause, Step, Reset, adjustable speed slider
+- **Binary readouts** — live bit-by-bit resolution of inputs and sum with pending/resolved coloring
+- **Keyboard shortcuts** — Space (pause/play), → (step), R (reset)
+- **Runs in browser** — compiled to WebAssembly via Emscripten, ~200 KB WASM
 
 ---
 
@@ -148,4 +148,4 @@ gateflow/
 
 ## License
 
-[MIT](LICENSE)
+[GNU Affero 3.0](LICENSE)

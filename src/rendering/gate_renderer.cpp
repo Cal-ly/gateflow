@@ -4,6 +4,7 @@
 #include "rendering/gate_renderer.hpp"
 
 #include "simulation/gate.hpp"
+#include "simulation/wire.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -71,13 +72,10 @@ void draw_gates(const Circuit& circuit, const Layout& layout, const AnimationSta
         Rectangle screen_rect = to_screen(it->second, scale, offset);
         const GateAnim& ga = anim.gate_anim(gate);
 
-        // Determine the gate's output value
+        // Determine the gate's output value in O(1)
         bool active = false;
-        for (const auto& wire_ptr : circuit.wires()) {
-            if (wire_ptr->get_source() == gate) {
-                active = wire_ptr->get_value();
-                break;
-            }
+        if (const Wire* out = gate->get_output(); out != nullptr) {
+            active = out->get_value();
         }
 
         Color fill;

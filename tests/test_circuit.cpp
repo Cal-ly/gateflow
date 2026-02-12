@@ -130,3 +130,41 @@ TEST_CASE("Input/output index bounds checking", "[circuit]") {
     CHECK_THROWS_AS(circuit.set_input(1, true), std::out_of_range);
     CHECK_THROWS_AS(circuit.get_output(1), std::out_of_range);
 }
+
+TEST_CASE("connect() rejects multi-driver wire source reassignment", "[circuit]") {
+    Circuit circuit;
+
+    Gate* g1 = circuit.add_gate(GateType::NOT);
+    Gate* g2 = circuit.add_gate(GateType::NOT);
+    Wire* w = circuit.add_wire();
+
+    circuit.connect(w, g1, nullptr);
+    CHECK_THROWS_AS(circuit.connect(w, g2, nullptr), std::runtime_error);
+}
+
+TEST_CASE("connect() rejects multiple output wires for one gate", "[circuit]") {
+    Circuit circuit;
+
+    Gate* g = circuit.add_gate(GateType::NOT);
+    Wire* w1 = circuit.add_wire();
+    Wire* w2 = circuit.add_wire();
+
+    circuit.connect(w1, g, nullptr);
+    CHECK_THROWS_AS(circuit.connect(w2, g, nullptr), std::runtime_error);
+}
+
+TEST_CASE("finalize() rejects inconsistent bidirectional connectivity", "[circuit]") {
+    Circuit circuit;
+
+    Wire* in = circuit.add_wire();
+    circuit.mark_input(in);
+    Gate* not_gate = circuit.add_gate(GateType::NOT);
+    Wire* out = circuit.add_wire();
+    circuit.mark_output(out);
+
+    // Build one-sided links intentionally (bypassing Circuit::connect)
+    not_gate->add_input(in);
+    not_gate->set_output(out);
+
+    CHECK_THROWS_AS(circuit.finalize(), std::runtime_error);
+}

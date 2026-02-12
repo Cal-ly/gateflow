@@ -24,11 +24,19 @@ struct Rect {
     float h = 0.0f;
 };
 
+/// A single routed branch path for one wire destination.
+/// Includes precomputed metrics for efficient animation rendering.
+struct WirePath {
+    std::vector<Vec2> points;
+    std::vector<float> cumulative_lengths; ///< cumulative_lengths[0] = 0
+    float total_length = 0.0f;
+};
+
 /// Holds the computed positions of every visual element in a circuit.
 /// All coordinates are in logical units — the renderer scales to screen pixels.
 struct Layout {
     std::map<const Gate*, Rect> gate_positions;
-    std::map<const Wire*, std::vector<Vec2>> wire_paths;
+    std::map<const Wire*, std::vector<WirePath>> wire_paths;
     std::vector<Vec2> input_positions;
     std::vector<Vec2> output_positions;
     Rect bounding_box;

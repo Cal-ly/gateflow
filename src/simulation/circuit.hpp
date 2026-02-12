@@ -82,6 +82,10 @@ class Circuit {
     [[nodiscard]] size_t num_outputs() const { return output_wires_.size(); }
 
   private:
+    /// Validates bidirectional connectivity invariants between gates and wires.
+    /// @throws std::runtime_error if an inconsistent link is found.
+    void validate_connectivity() const;
+
     uint32_t next_gate_id_ = 0;
     uint32_t next_wire_id_ = 0;
 

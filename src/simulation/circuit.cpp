@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <queue>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 
 namespace gateflow {
@@ -21,7 +22,17 @@ Wire* Circuit::add_wire() {
 }
 
 void Circuit::connect(Wire* wire, Gate* source, Gate* destination) {
+    if (wire == nullptr) {
+        throw std::invalid_argument("connect() requires a non-null wire");
+    }
+
     if (source != nullptr) {
+        if (wire->get_source() != nullptr && wire->get_source() != source) {
+            throw std::runtime_error("Wire already has a different source gate");
+        }
+        if (source->get_output() != nullptr && source->get_output() != wire) {
+            throw std::runtime_error("Gate already drives a different output wire");
+        }
         wire->set_source(source);
         source->set_output(wire);
     }
@@ -40,6 +51,8 @@ void Circuit::mark_output(Wire* wire) {
 }
 
 void Circuit::finalize() {
+    validate_connectivity();
+
     // Kahn's algorithm for topological sort
     // in-degree = number of input wires whose source is another gate
     std::unordered_map<Gate*, int> in_degree;
@@ -91,6 +104,74 @@ void Circuit::finalize() {
     }
 
     finalized_ = true;
+}
+
+void Circuit::validate_connectivity() const {
+    // For each gate input occurrence, the corresponding wire destination list
+    // must include the same number of occurrences for that gate.
+    for (const auto& gate_ptr : gates_) {
+        const Gate* gate = gate_ptr.get();
+
+        // Validate output link consistency.
+        if (const Wire* out = gate->get_output(); out != nullptr) {
+            if (out->get_source() != gate) {
+                throw std::runtime_error("Inconsistent output link: gate output wire source mismatch");
+            }
+        }
+
+        std::unordered_map<const Wire*, int> input_counts;
+        for (const Wire* input_wire : gate->get_inputs()) {
+            if (input_wire == nullptr) {
+                throw std::runtime_error("Inconsistent connectivity: gate has null input wire");
+            }
+            input_counts[input_wire]++;
+        }
+
+        for (const auto& [wire, required_count] : input_counts) {
+            int actual_count = 0;
+            for (const Gate* dest : wire->get_destinations()) {
+                if (dest == gate) {
+                    actual_count++;
+                }
+            }
+            if (actual_count < required_count) {
+                throw std::runtime_error(
+                    "Inconsistent connectivity: gate input not mirrored in wire destinations");
+            }
+        }
+    }
+
+    // For each wire link, verify the inverse link exists.
+    for (const auto& wire_ptr : wires_) {
+        const Wire* wire = wire_ptr.get();
+
+        if (const Gate* src = wire->get_source(); src != nullptr) {
+            if (src->get_output() != wire) {
+                throw std::runtime_error("Inconsistent connectivity: wire source gate does not point back to wire");
+            }
+        }
+
+        std::unordered_map<const Gate*, int> dest_counts;
+        for (const Gate* dest : wire->get_destinations()) {
+            if (dest == nullptr) {
+                throw std::runtime_error("Inconsistent connectivity: wire has null destination gate");
+            }
+            dest_counts[dest]++;
+        }
+
+        for (const auto& [dest_gate, required_count] : dest_counts) {
+            int actual_count = 0;
+            for (const Wire* gate_input : dest_gate->get_inputs()) {
+                if (gate_input == wire) {
+                    actual_count++;
+                }
+            }
+            if (actual_count < required_count) {
+                throw std::runtime_error(
+                    "Inconsistent connectivity: wire destination not mirrored in gate inputs");
+            }
+        }
+    }
 }
 
 void Circuit::set_input(size_t index, bool value) {

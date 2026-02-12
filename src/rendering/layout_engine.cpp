@@ -7,6 +7,7 @@
 #include <cmath>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 namespace gateflow {
 
@@ -71,6 +72,25 @@ std::vector<Vec2> route_wire(Vec2 from, Vec2 to, float channel_offset = 0.0f) {
         path.push_back({to.x, mid_y});
         path.push_back(to);
     }
+    return path;
+}
+
+/// Builds a WirePath with cached cumulative segment lengths.
+WirePath build_wire_path(std::vector<Vec2> points) {
+    WirePath path;
+    path.points = std::move(points);
+    path.cumulative_lengths.reserve(path.points.size());
+    path.cumulative_lengths.push_back(0.0f);
+
+    float total = 0.0f;
+    for (size_t i = 0; i + 1 < path.points.size(); i++) {
+        float dx = path.points[i + 1].x - path.points[i].x;
+        float dy = path.points[i + 1].y - path.points[i].y;
+        total += std::sqrt(dx * dx + dy * dy);
+        path.cumulative_lengths.push_back(total);
+    }
+
+    path.total_length = total;
     return path;
 }
 
@@ -217,7 +237,7 @@ Layout compute_layout(const Circuit& circuit) {
                             }
                             Vec2 to = gate_input_point(it->second, inp_idx,
                                                        static_cast<int>(dest->get_inputs().size()));
-                            layout.wire_paths[wire] = route_wire(from, to);
+                            layout.wire_paths[wire].push_back(build_wire_path(route_wire(from, to)));
                         }
                         break;
                     }
@@ -237,30 +257,28 @@ Layout compute_layout(const Circuit& circuit) {
                 for (size_t idx = 0; idx < circuit.output_wires().size(); idx++) {
                     if (circuit.output_wires()[idx] == wire) {
                         Vec2 to = layout.output_positions[idx];
-                        layout.wire_paths[wire] = route_wire(from, to);
+                        layout.wire_paths[wire].push_back(build_wire_path(route_wire(from, to)));
                         break;
                     }
                 }
             } else {
-                // Gate-to-gate wire — route to first destination
-                // (for fan-out wires, we draw one path to each destination;
-                //  here we store the path to the primary destination)
-                const Gate* dest = dests[0];
-                auto dest_it = layout.gate_positions.find(dest);
-                if (dest_it == layout.gate_positions.end()) {
-                    continue;
-                }
-                int inp_idx = 0;
-                for (size_t k = 0; k < dest->get_inputs().size(); k++) {
-                    if (dest->get_inputs()[k] == wire) {
-                        inp_idx = static_cast<int>(k);
-                        break;
+                // Gate-to-gate fan-out: route one branch per destination.
+                for (const Gate* dest : dests) {
+                    auto dest_it = layout.gate_positions.find(dest);
+                    if (dest_it == layout.gate_positions.end()) {
+                        continue;
                     }
+                    int inp_idx = 0;
+                    for (size_t k = 0; k < dest->get_inputs().size(); k++) {
+                        if (dest->get_inputs()[k] == wire) {
+                            inp_idx = static_cast<int>(k);
+                            break;
+                        }
+                    }
+                    Vec2 to = gate_input_point(dest_it->second, inp_idx,
+                                               static_cast<int>(dest->get_inputs().size()));
+                    layout.wire_paths[wire].push_back(build_wire_path(route_wire(from, to)));
                 }
-                Vec2 to = gate_input_point(dest_it->second, inp_idx,
-                                           static_cast<int>(dest->get_inputs().size()));
-
-                layout.wire_paths[wire] = route_wire(from, to);
             }
         }
 
@@ -301,12 +319,21 @@ Layout compute_layout(const Circuit& circuit) {
                 for (size_t idx = 0; idx < circuit.input_wires().size(); idx++) {
                     if (circuit.input_wires()[idx] == wire) {
                         Vec2 from = layout.input_positions[idx];
-                        const Gate* dest = dests[0];
-                        auto it = layout.gate_positions.find(dest);
-                        if (it != layout.gate_positions.end()) {
-                            Vec2 to = gate_input_point(it->second, 0,
-                                                       static_cast<int>(dest->get_inputs().size()));
-                            layout.wire_paths[wire] = route_wire(from, to);
+                        for (const Gate* dest : dests) {
+                            auto it = layout.gate_positions.find(dest);
+                            if (it != layout.gate_positions.end()) {
+                                int inp_idx = 0;
+                                for (size_t k = 0; k < dest->get_inputs().size(); k++) {
+                                    if (dest->get_inputs()[k] == wire) {
+                                        inp_idx = static_cast<int>(k);
+                                        break;
+                                    }
+                                }
+                                Vec2 to = gate_input_point(
+                                    it->second, inp_idx, static_cast<int>(dest->get_inputs().size()));
+                                layout.wire_paths[wire].push_back(
+                                    build_wire_path(route_wire(from, to)));
+                            }
                         }
                         break;
                     }
@@ -321,25 +348,26 @@ Layout compute_layout(const Circuit& circuit) {
                 if (dests.empty()) {
                     for (size_t idx = 0; idx < circuit.output_wires().size(); idx++) {
                         if (circuit.output_wires()[idx] == wire) {
-                            layout.wire_paths[wire] =
-                                route_wire(from, layout.output_positions[idx]);
+                            layout.wire_paths[wire].push_back(
+                                build_wire_path(route_wire(from, layout.output_positions[idx])));
                             break;
                         }
                     }
                 } else {
-                    const Gate* dest = dests[0];
-                    auto dest_it = layout.gate_positions.find(dest);
-                    if (dest_it != layout.gate_positions.end()) {
-                        int inp_idx = 0;
-                        for (size_t k = 0; k < dest->get_inputs().size(); k++) {
-                            if (dest->get_inputs()[k] == wire) {
-                                inp_idx = static_cast<int>(k);
-                                break;
+                    for (const Gate* dest : dests) {
+                        auto dest_it = layout.gate_positions.find(dest);
+                        if (dest_it != layout.gate_positions.end()) {
+                            int inp_idx = 0;
+                            for (size_t k = 0; k < dest->get_inputs().size(); k++) {
+                                if (dest->get_inputs()[k] == wire) {
+                                    inp_idx = static_cast<int>(k);
+                                    break;
+                                }
                             }
+                            Vec2 to = gate_input_point(dest_it->second, inp_idx,
+                                                       static_cast<int>(dest->get_inputs().size()));
+                            layout.wire_paths[wire].push_back(build_wire_path(route_wire(from, to)));
                         }
-                        Vec2 to = gate_input_point(dest_it->second, inp_idx,
-                                                   static_cast<int>(dest->get_inputs().size()));
-                        layout.wire_paths[wire] = route_wire(from, to);
                     }
                 }
             }
