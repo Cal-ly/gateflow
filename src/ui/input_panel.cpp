@@ -13,11 +13,11 @@ namespace gateflow {
 namespace {
 
 // --- Layout constants ---
-constexpr float ROW_HEIGHT = 32.0f;
+constexpr float ROW_HEIGHT = 36.96f;
 constexpr float ROW_GAP = 8.0f;
-constexpr float FIELD_HEIGHT = 28.0f;
-constexpr float BUTTON_HEIGHT = 30.0f;
-constexpr float SLIDER_HEIGHT = 20.0f;
+constexpr float FIELD_HEIGHT = 32.34f;
+constexpr float BUTTON_HEIGHT = 34.65f;
+constexpr float SLIDER_HEIGHT = 23.1f;
 constexpr float LABEL_WIDTH = 28.0f;
 constexpr float PADDING = 10.0f;
 constexpr int FONT_SIZE = 16;

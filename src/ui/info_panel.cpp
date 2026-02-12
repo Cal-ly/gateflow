@@ -3,19 +3,30 @@
 
 #include "ui/info_panel.hpp"
 
+#include <algorithm>
 #include <cstdio>
+#include <sstream>
 #include <string>
+#include <utility>
 
 namespace gateflow {
 
 namespace {
 
 constexpr float PADDING = 10.0f;
-constexpr float ROW_HEIGHT = 22.0f;
-constexpr int FONT_SIZE = 15;
-constexpr int FONT_SIZE_SMALL = 13;
-constexpr int FONT_SIZE_BIG = 20;
+constexpr float ROW_HEIGHT = 23.0f;
+constexpr int FONT_SIZE = 16;
+constexpr int FONT_SIZE_SMALL = 14;
+constexpr int FONT_SIZE_BIG = 21;
+constexpr float EXPL_FONT_SIZE = 16.0f;
+constexpr float EXPL_FONT_SPACING = 1.0f;
+constexpr float EXPL_LINE_GAP = 3.0f;
+constexpr float EXPL_PARAGRAPH_GAP = 4.0f;
+constexpr float EXPL_SCROLL_SPEED = 22.0f;
+constexpr float EXPL_SCROLL_SMOOTHING = 0.18f;
 constexpr int NUM_BITS = 7;
+constexpr float INFO_PANEL_HEIGHT = 231.0f;        // additional +10%
+constexpr float EXPLANATION_PANEL_HEIGHT = 720.0f; // doubled as requested
 
 const Color BG_COLOR = {35, 35, 42, 230};
 const Color BORDER_COLOR = {70, 70, 85, 255};
@@ -26,6 +37,96 @@ const Color BIT_RESOLVED_ZERO = {150, 150, 170, 255}; // Gray for resolved 0
 const Color BIT_PENDING = {60, 60, 70, 255};          // Dim for unresolved
 const Color RESULT_COLOR = {80, 220, 130, 255};
 const Color STATUS_COLOR = {180, 180, 100, 255};
+const Color EXPL_LABEL_COLOR = {200, 200, 220, 255};
+const Color EXPL_TEXT_COLOR = {190, 190, 205, 255};
+
+/// Draws wrapped text and returns consumed height.
+float draw_wrapped_text(const std::string& text, float x, float y, float max_width, int font_size,
+                        Color color, float line_gap = 2.0f) {
+    std::istringstream iss(text);
+    std::string word;
+    std::string line;
+    float cy = y;
+
+    while (iss >> word) {
+        std::string candidate = line.empty() ? word : (line + " " + word);
+        if (MeasureText(candidate.c_str(), font_size) <= static_cast<int>(max_width)) {
+            line = std::move(candidate);
+        } else {
+            if (!line.empty()) {
+                DrawText(line.c_str(), static_cast<int>(x), static_cast<int>(cy), font_size, color);
+                cy += static_cast<float>(font_size) + line_gap;
+            }
+            line = word;
+        }
+    }
+
+    if (!line.empty()) {
+        DrawText(line.c_str(), static_cast<int>(x), static_cast<int>(cy), font_size, color);
+        cy += static_cast<float>(font_size);
+    }
+
+    return cy - y;
+}
+
+/// Draws wrapped text with DrawTextEx and returns consumed height.
+float draw_wrapped_text_ex(const std::string& text, float x, float y, float max_width,
+                           float font_size, float spacing, Color color,
+                           float line_gap = EXPL_LINE_GAP) {
+    Font font = GetFontDefault();
+    std::istringstream iss(text);
+    std::string word;
+    std::string line;
+    float cy = y;
+
+    while (iss >> word) {
+        std::string candidate = line.empty() ? word : (line + " " + word);
+        if (MeasureTextEx(font, candidate.c_str(), font_size, spacing).x <= max_width) {
+            line = std::move(candidate);
+        } else {
+            if (!line.empty()) {
+                DrawTextEx(font, line.c_str(), {x, cy}, font_size, spacing, color);
+                cy += font_size + line_gap;
+            }
+            line = word;
+        }
+    }
+
+    if (!line.empty()) {
+        DrawTextEx(font, line.c_str(), {x, cy}, font_size, spacing, color);
+        cy += font_size;
+    }
+
+    return cy - y;
+}
+
+/// Measures wrapped text height without drawing.
+float measure_wrapped_text_ex(const std::string& text, float max_width, float font_size,
+                              float spacing, float line_gap = EXPL_LINE_GAP) {
+    Font font = GetFontDefault();
+    std::istringstream iss(text);
+    std::string word;
+    std::string line;
+    float height = 0.0f;
+
+    while (iss >> word) {
+        std::string candidate = line.empty() ? word : (line + " " + word);
+        if (MeasureTextEx(font, candidate.c_str(), font_size, spacing).x <= max_width) {
+            line = std::move(candidate);
+        } else {
+            if (!line.empty()) {
+                height += font_size + line_gap;
+            }
+            line = word;
+        }
+    }
+
+    if (!line.empty()) {
+        height += font_size;
+    }
+
+    return height;
+}
 
 /// Draw a row of binary bits with resolved/pending coloring.
 /// @param label  Row label (e.g. "A =")
@@ -113,13 +214,13 @@ std::string propagation_status(const PropagationScheduler& scheduler) {
 
 } // namespace
 
-void draw_info_panel(const Circuit& circuit, const PropagationScheduler& scheduler, int input_a,
-                     int input_b, int result, float panel_x, float panel_y, float panel_w) {
+float draw_info_panel(const Circuit& circuit, const PropagationScheduler& scheduler, int input_a,
+                      int input_b, int result, float panel_x, float panel_y, float panel_w) {
     float cx = panel_x + PADDING;
     float cy = panel_y + PADDING;
 
     // Panel background
-    float panel_h = 200.0f;
+    float panel_h = INFO_PANEL_HEIGHT;
     DrawRectangleRec({panel_x, panel_y, panel_w, panel_h}, BG_COLOR);
     DrawRectangleLinesEx({panel_x, panel_y, panel_w, panel_h}, 1.0f, BORDER_COLOR);
 
@@ -153,10 +254,97 @@ void draw_info_panel(const Circuit& circuit, const PropagationScheduler& schedul
     }
     cy += ROW_HEIGHT + 4.0f;
 
-    // Status text
+    // Status text (wrapped to panel width)
     std::string status = propagation_status(scheduler);
-    DrawText(status.c_str(), static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE_SMALL,
-             STATUS_COLOR);
+    float text_w = panel_w - 2.0f * PADDING;
+    (void)draw_wrapped_text(status, cx, cy, text_w, FONT_SIZE_SMALL, STATUS_COLOR);
+
+    return panel_h;
+}
+
+float draw_explanation_panel(float panel_x, float panel_y, float panel_w) {
+    static float scroll_target = 0.0f;
+    static float scroll_current = 0.0f;
+
+    float cx = panel_x + PADDING;
+    float cy = panel_y + PADDING;
+    float text_w = panel_w - 2.0f * PADDING;
+    float content_top = cy + ROW_HEIGHT;
+    float viewport_h = EXPLANATION_PANEL_HEIGHT - (PADDING * 2.0f + ROW_HEIGHT);
+
+    DrawRectangleRec({panel_x, panel_y, panel_w, EXPLANATION_PANEL_HEIGHT}, BG_COLOR);
+    DrawRectangleLinesEx({panel_x, panel_y, panel_w, EXPLANATION_PANEL_HEIGHT}, 1.0f,
+                         BORDER_COLOR);
+
+    DrawText("EXPLANATION", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE,
+             EXPL_LABEL_COLOR);
+    cy += ROW_HEIGHT;
+
+    const std::string lines[] = {
+        "What you are seeing: an adder built from logic gates. Signals travel from inputs to outputs over time.",
+        "A0..A6 are bits of the first number and B0..B6 are bits of the second number (0 = low, 1 = high).",
+        "Bit 0 is the least-significant bit (LSB). It is the first place where addition starts.",
+        "XOR means 'exclusive OR': it is 1 when exactly one input is 1. This gives each sum bit.",
+        "AND is 1 only when both inputs are 1. This creates a carry when a bit position overflows.",
+        "OR combines carry paths. NAND means NOT(AND) and can be used to build all other gates.",
+        "Cout means 'carry out': the extra bit produced when the top bit overflows.",
+        "Animation guide: gray/dim = not resolved yet, green = resolved 1, gray steady = resolved 0.",
+        "As time advances, carry moves across bits. That carry chain is why some additions take longer.",
+        "S0..S6 are sum output bits. When propagation completes, the final decimal answer is stable.",
+    };
+
+    float content_h = 0.0f;
+    for (const auto& line : lines) {
+        content_h += measure_wrapped_text_ex(line, text_w, EXPL_FONT_SIZE, EXPL_FONT_SPACING,
+                                             EXPL_LINE_GAP);
+        content_h += EXPL_PARAGRAPH_GAP;
+    }
+
+    float max_scroll = std::max(0.0f, content_h - viewport_h);
+
+    Rectangle panel_rect = {panel_x, panel_y, panel_w, EXPLANATION_PANEL_HEIGHT};
+    Vector2 mouse = GetMousePosition();
+    bool hovered = CheckCollisionPointRec(mouse, panel_rect);
+
+    if (hovered) {
+        float wheel = GetMouseWheelMove();
+        if (wheel != 0.0f) {
+            scroll_target -= wheel * EXPL_SCROLL_SPEED;
+        }
+    }
+
+    scroll_target = std::clamp(scroll_target, 0.0f, max_scroll);
+    scroll_current += (scroll_target - scroll_current) * EXPL_SCROLL_SMOOTHING;
+    scroll_current = std::clamp(scroll_current, 0.0f, max_scroll);
+
+    BeginScissorMode(static_cast<int>(panel_x + PADDING), static_cast<int>(content_top),
+                     static_cast<int>(text_w), static_cast<int>(viewport_h));
+
+    float draw_y = content_top - scroll_current;
+    for (const auto& line : lines) {
+        draw_y += draw_wrapped_text_ex(line, cx, draw_y, text_w, EXPL_FONT_SIZE, EXPL_FONT_SPACING,
+                                   EXPL_TEXT_COLOR, EXPL_LINE_GAP);
+        draw_y += EXPL_PARAGRAPH_GAP;
+    }
+
+    EndScissorMode();
+
+    // Subtle scrollbar indicator when content exceeds viewport.
+    if (max_scroll > 0.0f) {
+        float track_x = panel_x + panel_w - 6.0f;
+        float track_y = content_top;
+        float track_h = viewport_h;
+        DrawRectangle(static_cast<int>(track_x), static_cast<int>(track_y), 2,
+                      static_cast<int>(track_h), {80, 80, 95, 180});
+
+        float thumb_h = std::max(20.0f, track_h * (viewport_h / content_h));
+        float thumb_y = track_y + (track_h - thumb_h) *
+                                      (max_scroll > 0.0f ? (scroll_current / max_scroll) : 0.0f);
+        DrawRectangle(static_cast<int>(track_x), static_cast<int>(thumb_y), 2,
+                      static_cast<int>(thumb_h), {150, 150, 170, 210});
+    }
+
+    return EXPLANATION_PANEL_HEIGHT;
 }
 
 } // namespace gateflow

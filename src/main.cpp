@@ -34,7 +34,7 @@ constexpr int MIN_WIDTH = 900;
 constexpr int MIN_HEIGHT = 500;
 constexpr int TARGET_FPS = 60;
 constexpr float MAX_PIXELS_PER_UNIT = 40.0f; // Upper bound for scale
-constexpr float UI_PANEL_WIDTH = 220.0f;
+constexpr float UI_PANEL_WIDTH = 400.0f; // +25% wider right-side panels for readability
 constexpr float UI_MARGIN = 10.0f;
 constexpr float CIRCUIT_PADDING = 40.0f; // Pixels of padding around the circuit
 
@@ -230,8 +230,13 @@ void frame_tick(FrameState& state) {
 
     // Info panel (below input panel)
     float info_panel_y = UI_MARGIN + input_panel.panel_height + 10.0f;
-    gateflow::draw_info_panel(*app.circuit, *app.scheduler, ui.input_a, ui.input_b, app.result,
-                              panel_x, info_panel_y, UI_PANEL_WIDTH);
+    float info_panel_h =
+        gateflow::draw_info_panel(*app.circuit, *app.scheduler, ui.input_a, ui.input_b,
+                                  app.result, panel_x, info_panel_y, UI_PANEL_WIDTH);
+
+    // Explanation panel (below result panel)
+    float expl_y = info_panel_y + info_panel_h + 10.0f;
+    gateflow::draw_explanation_panel(panel_x, expl_y, UI_PANEL_WIDTH);
 
     // --- HUD: mode, depth, NAND indicator ---
     const char* mode_str = mode_label(app.scheduler->mode());

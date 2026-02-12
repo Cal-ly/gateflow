@@ -91,7 +91,7 @@ class PropagationScheduler {
     std::unordered_map<const Gate*, int> gate_depths_;
     int max_depth_ = 0;
     float current_depth_ = -1.0f; // Start before depth 0 so nothing is resolved
-    float speed_ = 3.0f;          // Depths per second (user-adjustable)
+    float speed_ = 1.0f;          // Depths per second (user-adjustable)
     PlaybackMode mode_ = PlaybackMode::REALTIME;
     bool step_requested_ = false;
 };

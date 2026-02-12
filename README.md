@@ -4,7 +4,8 @@
 
 Enter two numbers (0–99), press **Run**, and watch signals propagate through a 7-bit ripple-carry adder in real time. See exactly how XOR, AND, OR, and NAND gates work together to produce a result — then toggle **NAND View** to see every gate decomposed into universal NAND gates.
 
-> **[Try it live →](https://cally.github.io/gateflow)**  *(GitHub Pages — runs in any modern browser)*
+> **[Try it live](https://cal-ly.github.io/gateflow/)**
+
 
 ---
 

@@ -22,7 +22,15 @@ namespace gateflow {
 /// @param panel_x    Left edge of panel in screen coords
 /// @param panel_y    Top edge of panel in screen coords
 /// @param panel_w    Width of the panel
-void draw_info_panel(const Circuit& circuit, const PropagationScheduler& scheduler, int input_a,
-                     int input_b, int result, float panel_x, float panel_y, float panel_w);
+/// @return Rendered panel height, for dynamic stacking.
+float draw_info_panel(const Circuit& circuit, const PropagationScheduler& scheduler, int input_a,
+                      int input_b, int result, float panel_x, float panel_y, float panel_w);
+
+/// Draws a static explanation panel for novice users.
+/// @param panel_x Left edge of panel in screen coords
+/// @param panel_y Top edge of panel in screen coords
+/// @param panel_w Width of the panel
+/// @return Rendered panel height.
+float draw_explanation_panel(float panel_x, float panel_y, float panel_w);
 
 } // namespace gateflow

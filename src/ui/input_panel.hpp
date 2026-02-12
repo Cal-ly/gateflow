@@ -32,7 +32,7 @@ struct InputPanelResult {
 struct UIState {
     int input_a = 42;
     int input_b = 37;
-    float speed = 3.0f;
+    float speed = 1.0f;
     bool is_running = true;
     bool show_nand = false;
 

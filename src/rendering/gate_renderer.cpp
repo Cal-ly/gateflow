@@ -29,8 +29,8 @@ const Color OUTPUT_LABEL_COLOR = {255, 180, 180, 255};    // Light red for outpu
 constexpr float CORNER_ROUNDNESS = 0.3f; // Raylib roundness parameter (0.0–1.0)
 constexpr int CORNER_SEGMENTS = 4;
 constexpr float OUTLINE_THICKNESS = 2.0f;
-constexpr int FONT_SIZE_GATE = 14;
-constexpr int FONT_SIZE_IO = 12;
+constexpr int FONT_SIZE_GATE = 19;
+constexpr int FONT_SIZE_IO = 19;
 constexpr float IO_DOT_RADIUS = 4.0f;
 
 /// Converts a logical-unit rect to screen-space
