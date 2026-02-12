@@ -81,7 +81,7 @@ if(EMSCRIPTEN)
         -sGL_ENABLE_GET_PROC_ADDRESS     # Enable glfwGetProcAddress() 
         -sALLOW_MEMORY_GROWTH=1          # Dynamic heap
         --shell-file ${WASM_SHELL}       # Custom HTML shell
-        --preload-file ${CMAKE_CURRENT_SOURCE_DIR}/../resources/fonts/Hack-Regular.ttf@resources/fonts/Hack-Regular.ttf
+        --embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../resources/fonts/Hack-Regular.ttf@resources/fonts/Hack-Regular.ttf
     )
 
     if(GATEFLOW_EMSCRIPTEN_ENABLE_ASYNCIFY)
