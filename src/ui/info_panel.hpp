@@ -34,9 +34,10 @@ float draw_info_panel(const Circuit& circuit, const PropagationScheduler& schedu
 /// @param input_a Decimal value of input A
 /// @param input_b Decimal value of input B
 /// @param result Current computed result
+/// @param available_h Maximum height the panel may occupy (fills remaining window)
 /// @return Rendered panel height.
 float draw_explanation_panel(float panel_x, float panel_y, float panel_w,
                              const PropagationScheduler& scheduler, int input_a, int input_b,
-                             int result);
+                             int result, float available_h);
 
 } // namespace gateflow

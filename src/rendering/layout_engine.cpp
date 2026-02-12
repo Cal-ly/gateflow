@@ -16,7 +16,7 @@ namespace {
 // --- Layout constants (logical units) ---
 constexpr float GATE_WIDTH = 3.0f;
 constexpr float GATE_HEIGHT = 2.0f;
-constexpr float GATE_VERTICAL_SPACING = 3.0f; // Between gates in a column
+constexpr float GATE_VERTICAL_SPACING = 3.8f; // Between gates in a column
 constexpr float COLUMN_SPACING = 8.0f;        // Between full-adder columns
 constexpr float INPUT_MARGIN_TOP = 2.0f;      // Space above first row for inputs
 constexpr float OUTPUT_MARGIN_BOTTOM = 2.0f;  // Space below last row for outputs

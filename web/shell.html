@@ -51,6 +51,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            min-width: 900px;
+            min-height: 500px;
         }
 
         canvas.emscripten {
@@ -58,6 +60,9 @@
             border: 1px solid #2a2a38;
             border-radius: 6px;
             outline: none;
+            /* Web canvas adapts to available space — actual resolution set by JS */
+            width: 100%;
+            height: 100%;
         }
 
         /* Loading overlay */
@@ -159,10 +164,13 @@
     </div>
 
     <script>
+        var MIN_W = 900;
+        var MIN_H = 500;
+
         var Module = {
             canvas: (function() {
                 var canvas = document.getElementById('canvas');
-                // Set initial canvas size
+                // Initial size — will be updated by resizeCanvas
                 canvas.width = 1280;
                 canvas.height = 720;
                 return canvas;
@@ -175,7 +183,6 @@
                     loading.classList.add('hidden');
                     return;
                 }
-                // Parse "Downloading data... (X/Y)" format
                 var m = text.match(/(\d+\.?\d*)\s*\/\s*(\d+\.?\d*)/);
                 if (m) {
                     var pct = (parseFloat(m[1]) / parseFloat(m[2])) * 100;
@@ -184,32 +191,47 @@
                 }
             },
 
-            // Handle runtime initialized
             onRuntimeInitialized: function() {
                 var loading = document.getElementById('loading');
                 loading.classList.add('hidden');
+                // Apply real size once WASM is ready
+                resizeCanvas();
             }
         };
 
-        // Responsive canvas scaling
+        // Resize the actual canvas resolution to match the available browser
+        // viewport so that Raylib's GetScreenWidth()/GetScreenHeight() returns
+        // the real dimensions and the responsive UI system works.
         function resizeCanvas() {
             var canvas = document.getElementById('canvas');
-            var container = document.getElementById('canvas-container');
             var header = document.getElementById('header');
             var footer = document.getElementById('footer');
 
             var availW = window.innerWidth - 20;
             var availH = window.innerHeight - header.offsetHeight - footer.offsetHeight - 24;
 
-            var baseW = 1280;
-            var baseH = 720;
-            var scale = Math.min(availW / baseW, availH / baseH, 1.0);
+            // Clamp to minimum sizes
+            var w = Math.max(Math.floor(availW), MIN_W);
+            var h = Math.max(Math.floor(availH), MIN_H);
 
-            canvas.style.width = Math.floor(baseW * scale) + 'px';
-            canvas.style.height = Math.floor(baseH * scale) + 'px';
+            // Set the real canvas resolution (Raylib reads this)
+            if (canvas.width !== w || canvas.height !== h) {
+                canvas.width = w;
+                canvas.height = h;
+            }
+
+            // Container matches
+            var container = document.getElementById('canvas-container');
+            container.style.width = w + 'px';
+            container.style.height = h + 'px';
         }
 
-        window.addEventListener('resize', resizeCanvas);
+        var resizeTimer;
+        window.addEventListener('resize', function() {
+            // Debounce to avoid excessive redraws during drag
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(resizeCanvas, 80);
+        });
         window.addEventListener('load', resizeCanvas);
     </script>
 

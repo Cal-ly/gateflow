@@ -4,6 +4,7 @@
 #include "ui/input_panel.hpp"
 
 #include "rendering/app_font.hpp"
+#include "ui/ui_scale.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -14,16 +15,8 @@ namespace gateflow {
 
 namespace {
 
-// --- Layout constants ---
-constexpr float ROW_HEIGHT = 36.96f;
-constexpr float ROW_GAP = 8.0f;
-constexpr float FIELD_HEIGHT = 32.34f;
-constexpr float BUTTON_HEIGHT = 34.65f;
-constexpr float SLIDER_HEIGHT = 23.1f;
+// --- Layout constants (fixed) ---
 constexpr float LABEL_WIDTH = 28.0f;
-constexpr float PADDING = 10.0f;
-constexpr int FONT_SIZE = 16;
-constexpr int FONT_SIZE_SMALL = 13;
 constexpr float SLIDER_EPSILON = 0.001f;
 
 // --- Colors ---
@@ -48,6 +41,9 @@ const Color SLIDER_HANDLE = {180, 180, 200, 255};
 /// Draw a text input field. Returns true if the value changed.
 bool draw_number_field(const char* label, char* buf, int& cursor, bool& editing, float x, float y,
                        float w, int& out_value, int min_val, int max_val) {
+    const auto& sc = ui_scale();
+    int FONT_SIZE = sc.font_normal;
+    float FIELD_HEIGHT = sc.field_height;
     // Label
     DrawAppText(label, static_cast<int>(x), static_cast<int>(y + 6), FONT_SIZE, LABEL_COLOR);
 
@@ -119,6 +115,8 @@ bool draw_number_field(const char* label, char* buf, int& cursor, bool& editing,
 /// Draw a button. Returns true if clicked this frame.
 bool draw_button(const char* text, float x, float y, float w, float h, Color bg_normal,
                  Color bg_hover) {
+    const auto& sc = ui_scale();
+    int FONT_SIZE_SMALL = sc.font_small;
     Rectangle rect = {x, y, w, h};
     Vector2 mouse = GetMousePosition();
     bool hovered = CheckCollisionPointRec(mouse, rect);
@@ -137,6 +135,8 @@ bool draw_button(const char* text, float x, float y, float w, float h, Color bg_
 
 /// Draw a toggle button. Returns true if toggled this frame.
 bool draw_toggle(const char* label, bool value, float x, float y, float w, float h) {
+    const auto& sc = ui_scale();
+    int FONT_SIZE_SMALL = sc.font_small;
     Rectangle rect = {x, y, w, h};
     Vector2 mouse = GetMousePosition();
     bool hovered = CheckCollisionPointRec(mouse, rect);
@@ -163,6 +163,9 @@ bool draw_toggle(const char* label, bool value, float x, float y, float w, float
 /// Draw a horizontal slider. Returns true if the value changed.
 bool draw_slider(const char* label, float& value, float min_val, float max_val, bool& dragging,
                  float x, float y, float w) {
+    const auto& sc = ui_scale();
+    int FONT_SIZE_SMALL = sc.font_small;
+    float SLIDER_HEIGHT = sc.slider_height;
     // Label
     DrawAppText(label, static_cast<int>(x), static_cast<int>(y), FONT_SIZE_SMALL, LABEL_COLOR);
 
@@ -224,6 +227,14 @@ void sync_input_buffers(UIState& state) {
 } // namespace
 
 InputPanelResult draw_input_panel(UIState& state, float panel_x, float panel_y, float panel_w) {
+    const auto& sc = ui_scale();
+    float PADDING = sc.padding;
+    float ROW_HEIGHT = sc.row_height;
+    float ROW_GAP = sc.row_gap;
+    float BUTTON_HEIGHT = sc.button_height;
+    float SLIDER_HEIGHT = sc.slider_height;
+    int FONT_SIZE = sc.font_normal;
+
     InputPanelResult result;
     UIAction& action = result.action;
 

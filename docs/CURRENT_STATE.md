@@ -1,6 +1,6 @@
 # Gateflow — Current Project State
 
-> Last updated: 12 February 2026, end of Phase 5 — ALL PHASES COMPLETE
+> Last updated: 12 February 2026, end of Phase 6 — Responsive UI & Polish
 
 ## Project Overview
 
@@ -125,11 +125,51 @@ Interactive visual simulator showing how a CPU performs integer addition (0–99
 
 ## All Phases Complete ✅
 
-The project is feature-complete across all 5 phases.
-- Emscripten build configuration
-- Custom HTML shell, responsive canvas
-- Browser testing, performance tuning
-- README with screenshots, GitHub Pages deployment
+The project is feature-complete across all 6 phases.
+- Phases 1–5: Simulation, rendering, animation, UI, WASM
+- Phase 6: Responsive UI, custom font, web canvas, polish
+
+## Completed: Phase 6 — Responsive UI & Polish ✅
+
+### Custom Font System (`src/rendering/app_font.hpp/cpp`)
+- Bundled Hack Regular TTF (system font) into `resources/fonts/`
+- Centralised `init_app_font()` / `cleanup_app_font()` with fallback chain: bundled → system → Raylib default
+- `DrawAppText()` / `MeasureAppText()` wrappers replace all raw Raylib `DrawText()` / `MeasureText()` calls across 5 source files
+- Font loaded at 48px base with bilinear filtering for crisp rendering at all sizes
+
+### Responsive UI Scale System (`src/ui/ui_scale.hpp/cpp`)
+- `UIScale` struct: master factor, panel_w, margin, 4 font sizes, 6 spacing values, 6 viewport values
+- `update_ui_scale(screen_w, screen_h)` called each frame — computes metrics from window dimensions
+- Two-tier scaling: **panel factor** capped at 1.0 (fonts/buttons/spacing never upscale beyond 720p baseline), **viewport factor** uncapped (circuit area, title, HUD scale freely)
+- Panel width: 30% of screen, clamped 280–500px
+- Master factor: blend of height-dominant (70%) and width-based (30%) scaling, clamped 0.6–1.8
+
+### Proportional Panel Layout
+- Input panel and info (result) panel use `ui_scale()` for all metrics — no hardcoded pixel sizes
+- `draw_info_panel()` pre-computes height from scaled row arithmetic; draws background first, content on top
+- `draw_explanation_panel()` accepts `available_h` parameter — fills remaining vertical space below input + result panels
+- All three panels dynamically stack: input → result → explanation, with explanation absorbing leftover height
+
+### Responsive Circuit Viewport
+- `circuit_padding`, `max_ppu` (max pixels-per-unit) scale with viewport factor
+- Title font, HUD font, progress bar height/font all scale with viewport factor
+- `refit_circuit()` uses scaled padding and max_ppu for circuit fitting
+- Size-change detection uses `last_w`/`last_h` tracking (works for both native `IsWindowResized()` and Emscripten canvas changes)
+
+### Web Canvas Responsiveness
+- `shell.html` now sets **actual canvas resolution** (`canvas.width`/`canvas.height`) to browser viewport size, not just CSS scaling of a fixed buffer
+- Raylib's `GetScreenWidth()`/`GetScreenHeight()` returns real viewport dimensions in WASM
+- Resize debounced (80ms) to avoid excessive redraws during window drag
+- CSS `min-width: 900px` / `min-height: 500px` on canvas container
+- Desktop: `SetWindowMinSize(900, 500)` already enforced
+
+### GitHub Pages Deployment Fix
+- Switched from `--preload-file` to `--embed-file` for font bundling — eliminates separate `index.data` fetch that caused loading hang
+- Deploy workflow copies `index.data` with `|| true` safety net
+
+### Visual Fixes
+- Input node label overlap: A labels right-aligned, B labels left-aligned, font reduced to 14px
+- UTF-8 glyph rendering: replaced `✓`/`→`/`·` with ASCII equivalents (`ok`/`..`/`-`) — Hack Regular doesn't include all Unicode glyphs in the loaded range
 
 ## File Structure
 
@@ -142,14 +182,20 @@ gateflow/
 ├── LICENSE
 ├── CLAUDE_CODE_GUIDELINES.md
 ├── gateflow-spec.md
+├── gateflow-enhancements.md
+├── resources/
+│   └── fonts/
+│       └── Hack-Regular.ttf      ← Bundled custom font
 ├── docs/
 │   ├── CURRENT_STATE.md          ← this file
+│   ├── gateflow-spec.md
 │   └── LL_LI.md                  ← lessons learned / identified
 ├── src/
 │   ├── CMakeLists.txt
 │   ├── main.cpp                  ← Entry point (native + Emscripten)
 │   ├── rendering/
 │   │   ├── animation_state.hpp / animation_state.cpp
+│   │   ├── app_font.hpp / app_font.cpp   ← Custom font management
 │   │   ├── layout_engine.hpp / layout_engine.cpp
 │   │   ├── gate_renderer.hpp / gate_renderer.cpp
 │   │   └── wire_renderer.hpp / wire_renderer.cpp
@@ -163,9 +209,10 @@ gateflow/
 │   │   └── propagation_scheduler.hpp / propagation_scheduler.cpp
 │   └── ui/
 │       ├── input_panel.hpp / input_panel.cpp
-│       └── info_panel.hpp / info_panel.cpp
+│       ├── info_panel.hpp / info_panel.cpp
+│       └── ui_scale.hpp / ui_scale.cpp   ← Responsive UI scaling
 ├── web/
-│   └── shell.html                ← Custom Emscripten HTML shell
+│   └── shell.html                ← Custom Emscripten HTML shell (responsive)
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml            ← GitHub Pages WASM deployment

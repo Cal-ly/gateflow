@@ -135,3 +135,41 @@ The `-sASYNCIFY` flag is included for safety (it allows `emscripten_sleep()` and
 
 **LI-014 — Canvas scaling via CSS vs. internal resolution**
 The current approach keeps the canvas at 1280×720 internal resolution and scales via CSS `width/height`. This means Raylib's `GetMouseX/Y` returns coordinates in the internal resolution, which is correct for the UI. However, on high-DPI displays, text may appear slightly blurry. A future improvement could detect `devicePixelRatio` and render at native resolution.
+
+---
+
+## Phase 6: Responsive UI & Polish
+
+### Lessons Learned
+
+**LL-016 — `--preload-file` generates a separate `.data` file that deployment pipelines miss**
+Emscripten's `--preload-file` flag produces an `index.data` file alongside `index.js`/`index.wasm`. If the deployment workflow only copies `.html`/`.js`/`.wasm`, the browser hangs on the loading screen waiting for a `.data` file that doesn't exist. **Resolution:** Switch to `--embed-file` which bakes asset bytes directly into the WASM binary — no extra files to deploy. Trade-off is slightly larger WASM size but eliminates a failure mode entirely.
+
+**LL-017 — Drawing background after content paints over everything**
+When switching from a fixed panel height to a content-measured height, the natural approach is: draw content, measure how tall it was, then draw background at that height. But Raylib has no z-ordering — the background rectangle covers all previously drawn text. **Resolution:** Either pre-compute height arithmetically (sum of row heights) before drawing anything, or use a two-pass approach. Pre-computation is simpler and avoids double-drawing.
+
+**LL-018 — Capping panel pixel height without capping content metrics causes overflow**
+Hard-capping a panel at e.g. 220px while its internal buttons/fonts/spacing scale up with the window causes content to overflow the panel boundary. The cap must be applied at the *metrics* level, not the *container* level. **Resolution:** Two-tier scale factor — panel metrics use `min(factor, 1.0)` so they never grow beyond baseline, while viewport elements (circuit, title, HUD) use the full uncapped factor.
+
+**LL-019 — Raylib's `IsWindowResized()` doesn't fire for Emscripten canvas resolution changes**
+When JavaScript resizes `canvas.width`/`canvas.height` in response to a browser resize event, Raylib's `IsWindowResized()` may not detect it (GLFW doesn't generate a resize callback for programmatic canvas dimension changes). **Resolution:** Track `last_w`/`last_h` in the frame loop and compare against `GetScreenWidth()`/`GetScreenHeight()` each frame — this catches both native resize events and Emscripten canvas resolution changes.
+
+**LL-020 — Custom fonts loaded by Raylib don't include all Unicode code points**
+Raylib's `LoadFontEx()` loads a specified set of glyph code points (default: 95 ASCII printable characters). UTF-8 symbols like `✓` (U+2713), `→` (U+2192), `·` (U+00B7) fall outside this range and render as `?` or a missing glyph box. **Resolution:** Either expand the glyph range in `LoadFontEx()` (increases memory) or replace with ASCII equivalents. For a small UI, ASCII is simpler and avoids cross-platform font inconsistencies.
+
+**LL-021 — CSS-only canvas scaling doesn't give Raylib the real viewport size**
+Scaling a fixed-resolution canvas via CSS `width`/`height` means `GetScreenWidth()`/`GetScreenHeight()` always returns the original size (e.g. 1280×720) regardless of browser window. The responsive UI system never activates because it sees constant dimensions. **Resolution:** Set the actual `canvas.width`/`canvas.height` attributes to the available viewport size so Raylib reads the true resolution. CSS `width: 100%; height: 100%` makes the canvas fill its container.
+
+### Lessons Identified
+
+**LI-015 — Responsive scaling creates a tension between readability and space efficiency**
+Small fonts at low resolutions vs. wasted space at high resolutions. The two-tier factor (panel capped at 1.0, viewport uncapped) is a pragmatic solution, but more sophisticated approaches — like font-size breakpoints or panel collapse/accordion behavior — could improve the experience at extreme resolutions (< 600px or > 2560px wide).
+
+**LI-016 — Font fallback chains are platform-specific**
+The app_font module tries bundled TTF → system path → Raylib default. The system path (`/usr/share/fonts/truetype/hack/`) is Linux-specific. macOS and Windows users building natively would skip straight to the Raylib default font. If cross-platform native builds become important, platform-conditional font paths or always-bundling the TTF is necessary.
+
+**LI-017 — Debounced resize can cause a brief visual mismatch**
+The 80ms debounce on canvas resize means the user sees ~5 frames at the old resolution during a drag. For a simulator this is acceptable, but for a polished product, consider requestAnimationFrame-based throttling instead of setTimeout debouncing — it aligns resize with the render cycle more naturally.
+
+**LI-018 — Pre-computed panel heights are fragile against content changes**
+The info panel's height is computed by summing expected row heights arithmetically. If new rows are added (e.g., overflow indicator, additional status lines), the estimate must be manually updated. A measuring pass — where content is drawn to a throwaway buffer or clipping region and the actual Y cursor tracked — would be more maintainable, at the cost of slightly more code.

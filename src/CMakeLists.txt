@@ -33,6 +33,7 @@ target_compile_features(gateflow_rendering PUBLIC cxx_std_17)
 add_library(gateflow_ui
     ui/input_panel.cpp
     ui/info_panel.cpp
+    ui/ui_scale.cpp
 )
 target_include_directories(gateflow_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(gateflow_ui PUBLIC gateflow_rendering)

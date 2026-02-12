@@ -16,6 +16,7 @@
 #include "timing/propagation_scheduler.hpp"
 #include "ui/info_panel.hpp"
 #include "ui/input_panel.hpp"
+#include "ui/ui_scale.hpp"
 
 #include <raylib.h>
 
@@ -34,10 +35,6 @@ constexpr int INITIAL_HEIGHT = 720;
 constexpr int MIN_WIDTH = 900;
 constexpr int MIN_HEIGHT = 500;
 constexpr int TARGET_FPS = 60;
-constexpr float MAX_PIXELS_PER_UNIT = 40.0f; // Upper bound for scale
-constexpr float UI_PANEL_WIDTH = 400.0f; // +25% wider right-side panels for readability
-constexpr float UI_MARGIN = 10.0f;
-constexpr float CIRCUIT_PADDING = 40.0f; // Pixels of padding around the circuit
 
 constexpr int ADDER_BITS = 7;
 
@@ -48,7 +45,7 @@ struct AppState {
     std::unique_ptr<gateflow::PropagationScheduler> scheduler;
     std::unique_ptr<gateflow::AnimationState> anim;
     int result = 0;
-    float scale = MAX_PIXELS_PER_UNIT;
+    float scale = 40.0f;  // Will be recomputed by refit_circuit
     Vector2 offset = {0, 0};
 };
 
@@ -107,17 +104,18 @@ void rebuild_app_state(AppState& app, const gateflow::UIState& ui) {
 /// Recomputes scale and offset to fit the circuit in the current window.
 /// Called on rebuild and on window resize.
 void refit_circuit(AppState& app) {
+    const auto& sc = gateflow::ui_scale();
     float screen_w = static_cast<float>(GetScreenWidth());
     float screen_h = static_cast<float>(GetScreenHeight());
 
-    float available_w = screen_w - UI_PANEL_WIDTH - 2.0f * UI_MARGIN - 2.0f * CIRCUIT_PADDING;
-    float available_h = screen_h - 2.0f * CIRCUIT_PADDING - 40.0f; // 40px for title bar
+    float available_w = screen_w - sc.panel_w - 2.0f * sc.margin - 2.0f * sc.circuit_padding;
+    float available_h = screen_h - 2.0f * sc.circuit_padding - 40.0f; // 40px for title bar
 
     float bbox_w = app.layout.bounding_box.w;
     float bbox_h = app.layout.bounding_box.h;
 
     if (bbox_w <= 0.0f || bbox_h <= 0.0f) {
-        app.scale = MAX_PIXELS_PER_UNIT;
+        app.scale = sc.max_ppu;
         app.offset = {0, 0};
         return;
     }
@@ -125,12 +123,12 @@ void refit_circuit(AppState& app) {
     // Pick the largest scale that fits both dimensions, capped at MAX
     float scale_w = available_w / bbox_w;
     float scale_h = available_h / bbox_h;
-    app.scale = std::min({scale_w, scale_h, MAX_PIXELS_PER_UNIT});
+    app.scale = std::min({scale_w, scale_h, sc.max_ppu});
     if (app.scale < 4.0f) app.scale = 4.0f; // Floor to keep things visible
 
     float circuit_w = bbox_w * app.scale;
     float circuit_h = bbox_h * app.scale;
-    float area_w = screen_w - UI_PANEL_WIDTH - UI_MARGIN;
+    float area_w = screen_w - sc.panel_w - sc.margin;
 
     app.offset = {
         (area_w - circuit_w) / 2.0f - app.layout.bounding_box.x * app.scale,
@@ -148,19 +146,6 @@ void reset_propagation(AppState& app, const gateflow::UIState& ui) {
     app.scheduler->set_speed(ui.speed);
 }
 
-/// Returns a mode label string
-const char* mode_label(gateflow::PlaybackMode mode) {
-    switch (mode) {
-    case gateflow::PlaybackMode::REALTIME:
-        return "PLAYING";
-    case gateflow::PlaybackMode::PAUSED:
-        return "PAUSED";
-    case gateflow::PlaybackMode::STEP:
-        return "STEP";
-    }
-    return "???";
-}
-
 /// All mutable state needed by the frame loop, bundled so it can be passed
 /// through Emscripten's void* callback.
 struct FrameState {
@@ -175,13 +160,23 @@ void frame_tick(FrameState& state) {
     auto& app = state.app;
     float dt = GetFrameTime();
 
-    // --- Detect window resize and refit circuit ---
-    if (IsWindowResized()) {
+    int screen_w = GetScreenWidth();
+    int screen_h = GetScreenHeight();
+
+    // --- Detect any size change (native resize OR Emscripten canvas resize) ---
+    static int last_w = 0, last_h = 0;
+    if (screen_w != last_w || screen_h != last_h) {
+        last_w = screen_w;
+        last_h = screen_h;
+        gateflow::update_ui_scale(screen_w, screen_h);
         refit_circuit(app);
     }
 
-    int screen_w = GetScreenWidth();
-    int screen_h = GetScreenHeight();
+    // --- Recompute responsive UI metrics each frame ---
+    gateflow::update_ui_scale(screen_w, screen_h);
+    const auto& sc = gateflow::ui_scale();
+    float panel_w = sc.panel_w;
+    float ui_margin = sc.margin;
 
     // --- Handle keyboard shortcuts (only when not editing a text field) ---
     if (!ui.editing_a && !ui.editing_b) {
@@ -216,68 +211,76 @@ void frame_tick(FrameState& state) {
     // Draw title
     std::string title = std::to_string(ui.input_a) + " + " + std::to_string(ui.input_b) + " = " +
                         std::to_string(app.result);
-    int title_width = gateflow::MeasureAppText(title.c_str(), 24);
-    float circuit_area_w = static_cast<float>(screen_w) - UI_PANEL_WIDTH - UI_MARGIN;
+    int title_font = sc.title_font;
+    int title_width = gateflow::MeasureAppText(title.c_str(), title_font);
+    float circuit_area_w = static_cast<float>(screen_w) - panel_w - ui_margin;
     gateflow::DrawAppText(title.c_str(),
-             static_cast<int>((circuit_area_w - static_cast<float>(title_width)) / 2.0f), 12, 24,
+             static_cast<int>((circuit_area_w - static_cast<float>(title_width)) / 2.0f), 12, title_font,
              {240, 240, 240, 255});
 
     // Global propagation progress bar
     float progress = 0.0f;
-    if (app.scheduler->max_depth() >= 0) {
+    if (app.scheduler->max_depth() > 0) {
         progress = std::clamp(app.scheduler->current_depth() /
-                                  static_cast<float>(app.scheduler->max_depth() + 1),
+                                  static_cast<float>(app.scheduler->max_depth()),
                               0.0f, 1.0f);
     }
-    Rectangle progress_track = {12.0f, 44.0f, circuit_area_w - 24.0f, 10.0f};
+    Rectangle progress_track = {12.0f, 44.0f, circuit_area_w - 24.0f, sc.progress_h};
     DrawRectangleRounded(progress_track, 0.35f, 4, {45, 45, 55, 255});
     Rectangle progress_fill = progress_track;
     progress_fill.width *= progress;
-    DrawRectangleRounded(progress_fill, 0.35f, 4, {70, 180, 255, 220});
-
-    std::string progress_text =
-        "Propagation depth " + std::to_string(static_cast<int>(app.scheduler->current_depth())) +
-        "/" + std::to_string(app.scheduler->max_depth());
-    gateflow::DrawAppText(progress_text.c_str(), 14, 57, 12, {155, 165, 180, 230});
+    Color bar_color = app.scheduler->is_complete() ? Color{80, 220, 100, 230}
+                                                   : Color{245, 190, 70, 220};
+    DrawRectangleRounded(progress_fill, 0.35f, 4, bar_color);
 
     // --- Right-side UI panels ---
-    float panel_x = static_cast<float>(screen_w) - UI_PANEL_WIDTH - UI_MARGIN;
+    float panel_x = static_cast<float>(screen_w) - panel_w - ui_margin;
 
     // Input panel (top right)
     gateflow::InputPanelResult input_panel =
-        gateflow::draw_input_panel(ui, panel_x, UI_MARGIN, UI_PANEL_WIDTH);
+        gateflow::draw_input_panel(ui, panel_x, ui_margin, panel_w);
     gateflow::UIAction action = input_panel.action;
 
     // Info panel (below input panel)
-    float info_panel_y = UI_MARGIN + input_panel.panel_height + 10.0f;
+    float info_panel_y = ui_margin + input_panel.panel_height + 10.0f;
     float info_panel_h =
         gateflow::draw_info_panel(*app.circuit, *app.scheduler, ui.input_a, ui.input_b,
-                                  app.result, panel_x, info_panel_y, UI_PANEL_WIDTH);
+                                  app.result, panel_x, info_panel_y, panel_w);
 
-    // Explanation panel (below result panel)
+    // Explanation panel (fills remaining vertical space)
     float expl_y = info_panel_y + info_panel_h + 10.0f;
-    gateflow::draw_explanation_panel(panel_x, expl_y, UI_PANEL_WIDTH, *app.scheduler, ui.input_a,
-                                     ui.input_b, app.result);
+    float expl_available_h = static_cast<float>(screen_h) - expl_y - ui_margin;
+    gateflow::draw_explanation_panel(panel_x, expl_y, panel_w, *app.scheduler, ui.input_a,
+                                     ui.input_b, app.result, expl_available_h);
 
-    // --- HUD: mode, depth, NAND indicator ---
-    const char* mode_str = mode_label(app.scheduler->mode());
-    gateflow::DrawAppText(mode_str, 10, screen_h - 50, 14,
-             app.scheduler->mode() == gateflow::PlaybackMode::PAUSED ? Color{255, 200, 80, 255}
-                                                                     : Color{80, 220, 100, 255});
+    // --- Unified status indicator (top-right of circuit area) ---
+    {
+        const char* status_str = nullptr;
+        Color status_color = {140, 140, 160, 255};
 
-    std::string depth_str =
-        "Depth: " + std::to_string(static_cast<int>(app.scheduler->current_depth())) + " / " +
-        std::to_string(app.scheduler->max_depth());
-    gateflow::DrawAppText(depth_str.c_str(), 10, screen_h - 32, 13, {140, 140, 140, 255});
+        if (app.scheduler->is_complete()) {
+            status_str = "COMPLETE";
+            status_color = {80, 220, 200, 255};
+        } else if (app.scheduler->mode() == gateflow::PlaybackMode::PAUSED) {
+            status_str = "PAUSED";
+            status_color = {255, 200, 80, 255};
+        } else if (app.scheduler->mode() == gateflow::PlaybackMode::REALTIME) {
+            status_str = "PLAYING";
+            status_color = {80, 220, 100, 255};
+        } else {
+            status_str = "READY";
+        }
 
-    if (ui.show_nand) {
-        gateflow::DrawAppText("NAND VIEW", 10, screen_h - 68, 13, {255, 160, 60, 255});
-    }
+        int sw_text = gateflow::MeasureAppText(status_str, sc.hud_font);
+        float status_x = circuit_area_w - static_cast<float>(sw_text) - 14.0f;
+        gateflow::DrawAppText(status_str, static_cast<int>(status_x), 16, sc.hud_font, status_color);
 
-    if (app.scheduler->is_complete()) {
-        gateflow::DrawAppText("PROPAGATION COMPLETE",
-                 static_cast<int>(circuit_area_w) - gateflow::MeasureAppText("PROPAGATION COMPLETE", 16) - 10,
-                 16, 16, {80, 220, 100, 255});
+        if (ui.show_nand) {
+            const char* nand_str = "NAND";
+            int nand_w = gateflow::MeasureAppText(nand_str, sc.hud_font - 1);
+            gateflow::DrawAppText(nand_str, static_cast<int>(status_x) - nand_w - 12, 16,
+                                  sc.hud_font - 1, {255, 160, 60, 255});
+        }
     }
 
     EndDrawing();

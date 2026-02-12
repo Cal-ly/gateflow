@@ -152,15 +152,26 @@ void draw_adder_groups(const Circuit& circuit, const Layout& layout, float scale
 
     // Overflow (Cout) group near the final output pin.
     if (!layout.output_positions.empty()) {
-        Vec2 cout = layout.output_positions.back();
-        Rect o = {cout.x - 1.7f, cout.y - 1.8f, 3.4f, 2.6f};
+        Vec2 cout_pos = layout.output_positions.back();
+        Rect o = {cout_pos.x - 1.7f, cout_pos.y - 1.8f, 3.4f, 2.6f};
         Rectangle so = to_screen(o, scale, offset);
-        DrawRectangleRounded(so, 0.2f, 4, {45, 45, 60, 170});
-        DrawRectangleRoundedLines(so, 0.2f, 4, 1.0f, {80, 80, 110, 220});
-        DrawAppText("Bit 7", static_cast<int>(so.x + 4), static_cast<int>(so.y + 3), 12,
-                 {210, 190, 130, 255});
-        DrawAppText("overflow", static_cast<int>(so.x + 4), static_cast<int>(so.y + 16), 10,
-                 {180, 170, 130, 255});
+
+        // Highlight amber when Cout = 1 (overflow), otherwise neutral.
+        int num_outputs = static_cast<int>(circuit.output_wires().size());
+        bool cout_active = (num_outputs > 0) && circuit.output_wires().back()->get_value();
+
+        Color bg = cout_active ? Color{65, 55, 30, 190} : Color{45, 45, 60, 170};
+        Color border = cout_active ? Color{245, 190, 70, 240} : Color{80, 80, 110, 220};
+        Color label_col = cout_active ? Color{245, 200, 100, 255} : Color{210, 190, 130, 255};
+
+        DrawRectangleRounded(so, 0.2f, 4, bg);
+        DrawRectangleRoundedLines(so, 0.2f, 4, 1.0f, border);
+        DrawAppText("Cout", static_cast<int>(so.x + 4), static_cast<int>(so.y + 3), 14,
+                 label_col);
+        if (cout_active) {
+            DrawAppText("overflow", static_cast<int>(so.x + 4), static_cast<int>(so.y + 18), 10,
+                     {255, 180, 80, 255});
+        }
     }
 }
 
@@ -349,8 +360,8 @@ void draw_io_labels(const Circuit& circuit, const Layout& layout, float scale, V
     int num_inputs = static_cast<int>(circuit.input_wires().size());
     int bits = num_inputs / 2;
 
-    // Smaller font for input labels to avoid overlap within tight columns.
-    constexpr int INPUT_FONT = 14;
+    // Slightly smaller font for input labels to avoid overlap, but readable.
+    constexpr int INPUT_FONT = 17;
 
     // Draw input dots and labels.
     // A[i] and B[i] share a column and are close together, so we right-align
