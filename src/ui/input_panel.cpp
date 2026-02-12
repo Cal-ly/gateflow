@@ -3,6 +3,8 @@
 
 #include "ui/input_panel.hpp"
 
+#include "rendering/app_font.hpp"
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -47,7 +49,7 @@ const Color SLIDER_HANDLE = {180, 180, 200, 255};
 bool draw_number_field(const char* label, char* buf, int& cursor, bool& editing, float x, float y,
                        float w, int& out_value, int min_val, int max_val) {
     // Label
-    DrawText(label, static_cast<int>(x), static_cast<int>(y + 6), FONT_SIZE, LABEL_COLOR);
+    DrawAppText(label, static_cast<int>(x), static_cast<int>(y + 6), FONT_SIZE, LABEL_COLOR);
 
     // Field rectangle
     float fx = x + LABEL_WIDTH;
@@ -101,7 +103,7 @@ bool draw_number_field(const char* label, char* buf, int& cursor, bool& editing,
         }
 
         // Draw cursor blink
-        float text_w = static_cast<float>(MeasureText(buf, FONT_SIZE));
+        float text_w = static_cast<float>(MeasureAppText(buf, FONT_SIZE));
         float cx = fx + 6.0f + text_w;
         if (static_cast<int>(GetTime() * 2.0) % 2 == 0) {
             DrawLine(static_cast<int>(cx), static_cast<int>(y + 5), static_cast<int>(cx),
@@ -110,7 +112,7 @@ bool draw_number_field(const char* label, char* buf, int& cursor, bool& editing,
     }
 
     // Draw text
-    DrawText(buf, static_cast<int>(fx + 6), static_cast<int>(y + 6), FONT_SIZE, TEXT_COLOR);
+    DrawAppText(buf, static_cast<int>(fx + 6), static_cast<int>(y + 6), FONT_SIZE, TEXT_COLOR);
     return changed;
 }
 
@@ -125,8 +127,8 @@ bool draw_button(const char* text, float x, float y, float w, float h, Color bg_
     DrawRectangleRec(rect, hovered ? bg_hover : bg_normal);
     DrawRectangleLinesEx(rect, 1.0f, BORDER_COLOR);
 
-    int tw = MeasureText(text, FONT_SIZE_SMALL);
-    DrawText(text, static_cast<int>(x + (w - static_cast<float>(tw)) / 2.0f),
+    int tw = MeasureAppText(text, FONT_SIZE_SMALL);
+    DrawAppText(text, static_cast<int>(x + (w - static_cast<float>(tw)) / 2.0f),
              static_cast<int>(y + (h - static_cast<float>(FONT_SIZE_SMALL)) / 2.0f),
              FONT_SIZE_SMALL, BUTTON_TEXT);
 
@@ -150,8 +152,8 @@ bool draw_toggle(const char* label, bool value, float x, float y, float w, float
     DrawRectangleRec(rect, bg);
     DrawRectangleLinesEx(rect, 1.0f, BORDER_COLOR);
 
-    int tw = MeasureText(label, FONT_SIZE_SMALL);
-    DrawText(label, static_cast<int>(x + (w - static_cast<float>(tw)) / 2.0f),
+    int tw = MeasureAppText(label, FONT_SIZE_SMALL);
+    DrawAppText(label, static_cast<int>(x + (w - static_cast<float>(tw)) / 2.0f),
              static_cast<int>(y + (h - static_cast<float>(FONT_SIZE_SMALL)) / 2.0f),
              FONT_SIZE_SMALL, BUTTON_TEXT);
 
@@ -162,7 +164,7 @@ bool draw_toggle(const char* label, bool value, float x, float y, float w, float
 bool draw_slider(const char* label, float& value, float min_val, float max_val, bool& dragging,
                  float x, float y, float w) {
     // Label
-    DrawText(label, static_cast<int>(x), static_cast<int>(y), FONT_SIZE_SMALL, LABEL_COLOR);
+    DrawAppText(label, static_cast<int>(x), static_cast<int>(y), FONT_SIZE_SMALL, LABEL_COLOR);
 
     float track_y = y + static_cast<float>(FONT_SIZE_SMALL) + 4.0f;
     float track_w = w;
@@ -206,7 +208,7 @@ bool draw_slider(const char* label, float& value, float min_val, float max_val, 
     // Draw value text
     char val_str[16];
     std::snprintf(val_str, sizeof(val_str), "%.1f", static_cast<double>(value));
-    DrawText(val_str, static_cast<int>(x + track_w + 8.0f), static_cast<int>(track_y + 2.0f),
+    DrawAppText(val_str, static_cast<int>(x + track_w + 8.0f), static_cast<int>(track_y + 2.0f),
              FONT_SIZE_SMALL, TEXT_COLOR);
 
     return changed;
@@ -247,7 +249,7 @@ InputPanelResult draw_input_panel(UIState& state, float panel_x, float panel_y, 
     DrawRectangleLinesEx({panel_x, panel_y, panel_w, result.panel_height}, 1.0f, BORDER_COLOR);
 
     // Title
-    DrawText("INPUTS", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE, TEXT_COLOR);
+    DrawAppText("INPUTS", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE, TEXT_COLOR);
     cy += ROW_HEIGHT;
 
     // Input A

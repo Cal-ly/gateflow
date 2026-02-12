@@ -6,6 +6,7 @@
 /// Supports both native desktop and Emscripten/WASM builds.
 
 #include "rendering/animation_state.hpp"
+#include "rendering/app_font.hpp"
 #include "rendering/gate_renderer.hpp"
 #include "rendering/layout_engine.hpp"
 #include "rendering/wire_renderer.hpp"
@@ -215,9 +216,9 @@ void frame_tick(FrameState& state) {
     // Draw title
     std::string title = std::to_string(ui.input_a) + " + " + std::to_string(ui.input_b) + " = " +
                         std::to_string(app.result);
-    int title_width = MeasureText(title.c_str(), 24);
+    int title_width = gateflow::MeasureAppText(title.c_str(), 24);
     float circuit_area_w = static_cast<float>(screen_w) - UI_PANEL_WIDTH - UI_MARGIN;
-    DrawText(title.c_str(),
+    gateflow::DrawAppText(title.c_str(),
              static_cast<int>((circuit_area_w - static_cast<float>(title_width)) / 2.0f), 12, 24,
              {240, 240, 240, 255});
 
@@ -237,7 +238,7 @@ void frame_tick(FrameState& state) {
     std::string progress_text =
         "Propagation depth " + std::to_string(static_cast<int>(app.scheduler->current_depth())) +
         "/" + std::to_string(app.scheduler->max_depth());
-    DrawText(progress_text.c_str(), 14, 57, 12, {155, 165, 180, 230});
+    gateflow::DrawAppText(progress_text.c_str(), 14, 57, 12, {155, 165, 180, 230});
 
     // --- Right-side UI panels ---
     float panel_x = static_cast<float>(screen_w) - UI_PANEL_WIDTH - UI_MARGIN;
@@ -260,22 +261,22 @@ void frame_tick(FrameState& state) {
 
     // --- HUD: mode, depth, NAND indicator ---
     const char* mode_str = mode_label(app.scheduler->mode());
-    DrawText(mode_str, 10, screen_h - 50, 14,
+    gateflow::DrawAppText(mode_str, 10, screen_h - 50, 14,
              app.scheduler->mode() == gateflow::PlaybackMode::PAUSED ? Color{255, 200, 80, 255}
                                                                      : Color{80, 220, 100, 255});
 
     std::string depth_str =
         "Depth: " + std::to_string(static_cast<int>(app.scheduler->current_depth())) + " / " +
         std::to_string(app.scheduler->max_depth());
-    DrawText(depth_str.c_str(), 10, screen_h - 32, 13, {140, 140, 140, 255});
+    gateflow::DrawAppText(depth_str.c_str(), 10, screen_h - 32, 13, {140, 140, 140, 255});
 
     if (ui.show_nand) {
-        DrawText("NAND VIEW", 10, screen_h - 68, 13, {255, 160, 60, 255});
+        gateflow::DrawAppText("NAND VIEW", 10, screen_h - 68, 13, {255, 160, 60, 255});
     }
 
     if (app.scheduler->is_complete()) {
-        DrawText("PROPAGATION COMPLETE",
-                 static_cast<int>(circuit_area_w) - MeasureText("PROPAGATION COMPLETE", 16) - 10,
+        gateflow::DrawAppText("PROPAGATION COMPLETE",
+                 static_cast<int>(circuit_area_w) - gateflow::MeasureAppText("PROPAGATION COMPLETE", 16) - 10,
                  16, 16, {80, 220, 100, 255});
     }
 
@@ -327,6 +328,9 @@ int main() {
     SetWindowMinSize(MIN_WIDTH, MIN_HEIGHT);
     SetTargetFPS(TARGET_FPS);
 
+    // --- Load custom font (must be after InitWindow) ---
+    gateflow::init_app_font();
+
     // --- Create all mutable state ---
     FrameState state;
     rebuild_app_state(state.app, state.ui);
@@ -341,6 +345,7 @@ int main() {
     }
 #endif
 
+    gateflow::cleanup_app_font();
     CloseWindow();
     return 0;
 }

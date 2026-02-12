@@ -23,6 +23,7 @@ add_library(gateflow_rendering
     rendering/gate_renderer.cpp
     rendering/wire_renderer.cpp
     rendering/animation_state.cpp
+    rendering/app_font.cpp
 )
 target_include_directories(gateflow_rendering PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(gateflow_rendering PUBLIC gateflow_timing raylib)
@@ -58,6 +59,18 @@ if(NOT EMSCRIPTEN)
     endforeach()
 endif()
 
+# --- Copy font resources next to executable so it can be loaded at runtime ---
+if(NOT EMSCRIPTEN)
+    add_custom_command(TARGET gateflow POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            $<TARGET_FILE_DIR:gateflow>/resources/fonts
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/../resources/fonts/Hack-Regular.ttf
+            $<TARGET_FILE_DIR:gateflow>/resources/fonts/Hack-Regular.ttf
+        COMMENT "Copying font resources"
+    )
+endif()
+
 # --- Emscripten / WASM build settings ---
 if(EMSCRIPTEN)
     set(WASM_SHELL "${CMAKE_CURRENT_SOURCE_DIR}/../web/shell.html")
@@ -68,6 +81,7 @@ if(EMSCRIPTEN)
         -sGL_ENABLE_GET_PROC_ADDRESS     # Enable glfwGetProcAddress() 
         -sALLOW_MEMORY_GROWTH=1          # Dynamic heap
         --shell-file ${WASM_SHELL}       # Custom HTML shell
+        --preload-file ${CMAKE_CURRENT_SOURCE_DIR}/../resources/fonts/Hack-Regular.ttf@resources/fonts/Hack-Regular.ttf
     )
 
     if(GATEFLOW_EMSCRIPTEN_ENABLE_ASYNCIFY)

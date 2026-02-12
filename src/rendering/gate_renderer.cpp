@@ -3,6 +3,7 @@
 
 #include "rendering/gate_renderer.hpp"
 
+#include "rendering/app_font.hpp"
 #include "simulation/gate.hpp"
 #include "simulation/wire.hpp"
 
@@ -145,7 +146,7 @@ void draw_adder_groups(const Circuit& circuit, const Layout& layout, float scale
         DrawRectangleRoundedLines(sr, 0.15f, 4, 1.0f, GROUP_BORDER_COLOR);
 
         std::string label = "Bit " + std::to_string(bit);
-        DrawText(label.c_str(), static_cast<int>(sr.x + 6), static_cast<int>(sr.y + 4), 14,
+        DrawAppText(label.c_str(), static_cast<int>(sr.x + 6), static_cast<int>(sr.y + 4), 14,
                  {180, 180, 200, 240});
     }
 
@@ -156,9 +157,9 @@ void draw_adder_groups(const Circuit& circuit, const Layout& layout, float scale
         Rectangle so = to_screen(o, scale, offset);
         DrawRectangleRounded(so, 0.2f, 4, {45, 45, 60, 170});
         DrawRectangleRoundedLines(so, 0.2f, 4, 1.0f, {80, 80, 110, 220});
-        DrawText("Bit 7", static_cast<int>(so.x + 4), static_cast<int>(so.y + 3), 12,
+        DrawAppText("Bit 7", static_cast<int>(so.x + 4), static_cast<int>(so.y + 3), 12,
                  {210, 190, 130, 255});
-        DrawText("overflow", static_cast<int>(so.x + 4), static_cast<int>(so.y + 16), 10,
+        DrawAppText("overflow", static_cast<int>(so.x + 4), static_cast<int>(so.y + 16), 10,
                  {180, 170, 130, 255});
     }
 }
@@ -220,13 +221,13 @@ void draw_gates(const Circuit& circuit, const Layout& layout, const AnimationSta
         // Draw gate type label centered
         auto label_sv = gate_type_name(gate->get_type());
         const char* label = label_sv.data();
-        int text_width = MeasureText(label, FONT_SIZE_GATE);
+        int text_width = MeasureAppText(label, FONT_SIZE_GATE);
         float text_x = screen_rect.x + (screen_rect.width - static_cast<float>(text_width)) / 2.0f;
         float text_y =
             screen_rect.y + (screen_rect.height - static_cast<float>(FONT_SIZE_GATE)) / 2.0f;
 
         Color label_color = with_alpha(LABEL_COLOR, std::max(alpha, 0.2f));
-        DrawText(label, static_cast<int>(text_x), static_cast<int>(text_y), FONT_SIZE_GATE,
+        DrawAppText(label, static_cast<int>(text_x), static_cast<int>(text_y), FONT_SIZE_GATE,
                  label_color);
 
         if (CheckCollisionPointRec(GetMousePosition(), screen_rect)) {
@@ -312,7 +313,7 @@ void draw_gates(const Circuit& circuit, const Layout& layout, const AnimationSta
                       3, with_alpha(accent, 0.85f));
 
         std::string title = std::string(gate_type_name(hovered_gate->get_type())) + " gate";
-        DrawText(title.c_str(), static_cast<int>(tip.x + 10), static_cast<int>(tip.y + 8), 14,
+        DrawAppText(title.c_str(), static_cast<int>(tip.x + 10), static_cast<int>(tip.y + 8), 14,
                  TOOLTIP_TITLE);
 
         std::string io = "in: ";
@@ -324,7 +325,7 @@ void draw_gates(const Circuit& circuit, const Layout& layout, const AnimationSta
         }
         io += "   out: ";
         io += out_val ? '1' : '0';
-        DrawText(io.c_str(), static_cast<int>(tip.x + 10), static_cast<int>(tip.y + 29), 13,
+        DrawAppText(io.c_str(), static_cast<int>(tip.x + 10), static_cast<int>(tip.y + 29), 13,
                  TOOLTIP_BODY);
 
         DrawLine(static_cast<int>(tip.x + 8), static_cast<int>(tip.y + 46),
@@ -337,7 +338,7 @@ void draw_gates(const Circuit& circuit, const Layout& layout, const AnimationSta
                 DrawRectangle(static_cast<int>(tip.x + 8), y - 1, static_cast<int>(tip.width - 16),
                               14, with_alpha(accent, 0.28f));
             }
-            DrawText(text.c_str(), static_cast<int>(tip.x + 12), y, 12,
+            DrawAppText(text.c_str(), static_cast<int>(tip.x + 12), y, 12,
                      highlight ? TOOLTIP_ROW_ACTIVE : TOOLTIP_ROW);
             y += 16;
         }
@@ -363,8 +364,8 @@ void draw_io_labels(const Circuit& circuit, const Layout& layout, float scale, V
             bool bit = circuit.input_wires()[i]->get_value();
             label = "B" + std::to_string(bi) + ": " + (bit ? "1" : "0");
         }
-        int text_width = MeasureText(label.c_str(), FONT_SIZE_IO);
-        DrawText(label.c_str(), static_cast<int>(pos.x) - text_width / 2,
+        int text_width = MeasureAppText(label.c_str(), FONT_SIZE_IO);
+        DrawAppText(label.c_str(), static_cast<int>(pos.x) - text_width / 2,
                  static_cast<int>(pos.y) - FONT_SIZE_IO - 4, FONT_SIZE_IO, INPUT_LABEL_COLOR);
     }
 
@@ -383,8 +384,8 @@ void draw_io_labels(const Circuit& circuit, const Layout& layout, float scale, V
             bool bit = circuit.output_wires()[i]->get_value();
             label = std::string("Cout: ") + (bit ? "1" : "0");
         }
-        DrawText(label.c_str(),
-                 static_cast<int>(pos.x) - MeasureText(label.c_str(), FONT_SIZE_IO) / 2,
+        DrawAppText(label.c_str(),
+                 static_cast<int>(pos.x) - MeasureAppText(label.c_str(), FONT_SIZE_IO) / 2,
                  static_cast<int>(pos.y) + 6, FONT_SIZE_IO, OUTPUT_LABEL_COLOR);
     }
 }

@@ -3,6 +3,7 @@
 
 #include "rendering/wire_renderer.hpp"
 
+#include "rendering/app_font.hpp"
 #include "simulation/gate.hpp"
 
 #include <algorithm>
@@ -225,7 +226,7 @@ void draw_wires(const Circuit& circuit, const Layout& layout, const AnimationSta
                 if (carry_wire) {
                     Vec2 mid = lerp_along_path(branch, 0.5f);
                     Vector2 smid = to_screen(mid, scale, offset);
-                    DrawText("C", static_cast<int>(smid.x + 2), static_cast<int>(smid.y - 10), 12,
+                    DrawAppText("C", static_cast<int>(smid.x + 2), static_cast<int>(smid.y - 10), 12,
                              CARRY_ACTIVE_COLOR);
                 }
             }

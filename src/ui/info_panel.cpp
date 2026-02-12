@@ -3,6 +3,7 @@
 
 #include "ui/info_panel.hpp"
 
+#include "rendering/app_font.hpp"
 #include "simulation/gate.hpp"
 
 #include <algorithm>
@@ -28,8 +29,8 @@ constexpr float EXPL_PARAGRAPH_GAP = 4.0f;
 constexpr float EXPL_SCROLL_SPEED = 22.0f;
 constexpr float EXPL_SCROLL_SMOOTHING = 0.18f;
 constexpr int NUM_BITS = 7;
-constexpr float INFO_PANEL_HEIGHT = 231.0f;        // additional +10%
-constexpr float EXPLANATION_PANEL_HEIGHT = 720.0f; // doubled as requested
+constexpr float INFO_PANEL_HEIGHT = 254.0f;        // +10% from 231
+constexpr float EXPLANATION_PANEL_HEIGHT = 648.0f; // -10% from 720
 
 const Color BG_COLOR = {35, 35, 42, 230};
 const Color BORDER_COLOR = {70, 70, 85, 255};
@@ -55,11 +56,11 @@ float draw_wrapped_text(const std::string& text, float x, float y, float max_wid
 
     while (iss >> word) {
         std::string candidate = line.empty() ? word : (line + " " + word);
-        if (MeasureText(candidate.c_str(), font_size) <= static_cast<int>(max_width)) {
+        if (MeasureAppText(candidate.c_str(), font_size) <= static_cast<int>(max_width)) {
             line = std::move(candidate);
         } else {
             if (!line.empty()) {
-                DrawText(line.c_str(), static_cast<int>(x), static_cast<int>(cy), font_size, color);
+                DrawAppText(line.c_str(), static_cast<int>(x), static_cast<int>(cy), font_size, color);
                 cy += static_cast<float>(font_size) + line_gap;
             }
             line = word;
@@ -67,7 +68,7 @@ float draw_wrapped_text(const std::string& text, float x, float y, float max_wid
     }
 
     if (!line.empty()) {
-        DrawText(line.c_str(), static_cast<int>(x), static_cast<int>(cy), font_size, color);
+        DrawAppText(line.c_str(), static_cast<int>(x), static_cast<int>(cy), font_size, color);
         cy += static_cast<float>(font_size);
     }
 
@@ -78,7 +79,7 @@ float draw_wrapped_text(const std::string& text, float x, float y, float max_wid
 float draw_wrapped_text_ex(const std::string& text, float x, float y, float max_width,
                            float font_size, float spacing, Color color,
                            float line_gap = EXPL_LINE_GAP) {
-    Font font = GetFontDefault();
+    Font font = get_app_font();
     std::istringstream iss(text);
     std::string word;
     std::string line;
@@ -108,7 +109,7 @@ float draw_wrapped_text_ex(const std::string& text, float x, float y, float max_
 /// Measures wrapped text height without drawing.
 float measure_wrapped_text_ex(const std::string& text, float max_width, float font_size,
                               float spacing, float line_gap = EXPL_LINE_GAP) {
-    Font font = GetFontDefault();
+    Font font = get_app_font();
     std::istringstream iss(text);
     std::string word;
     std::string line;
@@ -239,7 +240,7 @@ float draw_info_panel(const Circuit& circuit, const PropagationScheduler& schedu
     DrawRectangleLinesEx({panel_x, panel_y, panel_w, panel_h}, 1.0f, BORDER_COLOR);
 
     // Title
-    DrawText("RESULT", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE, TEXT_COLOR);
+    DrawAppText("RESULT", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE, TEXT_COLOR);
     cy += ROW_HEIGHT + 4.0f;
 
     // Weighted binary columns
@@ -249,13 +250,13 @@ float draw_info_panel(const Circuit& circuit, const PropagationScheduler& schedu
 
     for (int i = 0; i < NUM_BITS; i++) {
         std::string w = std::to_string(weights[i]);
-        DrawText(w.c_str(), static_cast<int>(bit_x0 + i * bit_step), static_cast<int>(cy),
+        DrawAppText(w.c_str(), static_cast<int>(bit_x0 + i * bit_step), static_cast<int>(cy),
                  FONT_SIZE_SMALL, LABEL_COLOR);
     }
     cy += ROW_HEIGHT - 2.0f;
 
     auto draw_bits_row = [&](const char* row_label, int value, bool output_row) {
-        DrawText(row_label, static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE, LABEL_COLOR);
+        DrawAppText(row_label, static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE, LABEL_COLOR);
         for (int i = 0; i < NUM_BITS; i++) {
             int bit_idx = NUM_BITS - 1 - i;
             bool bit_val = ((value >> bit_idx) & 1) != 0;
@@ -266,13 +267,13 @@ float draw_info_panel(const Circuit& circuit, const PropagationScheduler& schedu
 
             std::string glyph = resolved ? (bit_val ? "1" : "0") : "·";
             Color c = !resolved ? BIT_PENDING : (bit_val ? BIT_RESOLVED_ONE : BIT_RESOLVED_ZERO);
-            DrawText(glyph.c_str(), static_cast<int>(bit_x0 + i * bit_step), static_cast<int>(cy),
+            DrawAppText(glyph.c_str(), static_cast<int>(bit_x0 + i * bit_step), static_cast<int>(cy),
                      FONT_SIZE, c);
         }
 
         if (!output_row || scheduler.is_complete()) {
             std::string dec = "= " + std::to_string(value);
-            DrawText(dec.c_str(), static_cast<int>(bit_x0 + NUM_BITS * bit_step + 8),
+            DrawAppText(dec.c_str(), static_cast<int>(bit_x0 + NUM_BITS * bit_step + 8),
                      static_cast<int>(cy), FONT_SIZE, TEXT_COLOR);
         }
         cy += ROW_HEIGHT;
@@ -291,21 +292,21 @@ float draw_info_panel(const Circuit& circuit, const PropagationScheduler& schedu
     bool cout_resolved = scheduler.is_complete();
     bool cout_val = circuit.get_output(NUM_BITS);
     std::string cout_txt = std::string("Cout: ") + (cout_resolved ? (cout_val ? "1" : "0") : "·");
-    DrawText(cout_txt.c_str(), static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE,
+    DrawAppText(cout_txt.c_str(), static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE,
              cout_resolved ? (cout_val ? BIT_RESOLVED_ONE : BIT_RESOLVED_ZERO) : BIT_PENDING);
     cy += ROW_HEIGHT;
 
     std::vector<const Wire*> carries = collect_carry_wires(circuit);
     if (!carries.empty()) {
-        DrawText("Carry:", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE_SMALL,
+        DrawAppText("Carry:", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE_SMALL,
                  LABEL_COLOR);
         float ccx = cx + 60.0f;
         for (size_t i = 0; i < carries.size(); i++) {
             bool resolved = scheduler.is_wire_resolved(carries[i]);
             std::string token = "C" + std::to_string(i) + (resolved ? " ✓" : " →");
-            DrawText(token.c_str(), static_cast<int>(ccx), static_cast<int>(cy), FONT_SIZE_SMALL,
+            DrawAppText(token.c_str(), static_cast<int>(ccx), static_cast<int>(cy), FONT_SIZE_SMALL,
                      resolved ? CARRY_OK_COLOR : CARRY_PENDING_COLOR);
-            ccx += static_cast<float>(MeasureText(token.c_str(), FONT_SIZE_SMALL)) + 8.0f;
+            ccx += static_cast<float>(MeasureAppText(token.c_str(), FONT_SIZE_SMALL)) + 8.0f;
             if (ccx > panel_x + panel_w - 80.0f) {
                 ccx = cx + 60.0f;
                 cy += ROW_HEIGHT - 4.0f;
@@ -318,7 +319,7 @@ float draw_info_panel(const Circuit& circuit, const PropagationScheduler& schedu
     if (scheduler.is_complete()) {
         char result_str[32];
         std::snprintf(result_str, sizeof(result_str), "%d + %d = %d", input_a, input_b, result);
-        DrawText(result_str, static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE_BIG,
+        DrawAppText(result_str, static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE_BIG,
                  RESULT_COLOR);
     }
     cy += ROW_HEIGHT + 2.0f;
@@ -347,12 +348,12 @@ float draw_explanation_panel(float panel_x, float panel_y, float panel_w,
     DrawRectangleLinesEx({panel_x, panel_y, panel_w, EXPLANATION_PANEL_HEIGHT}, 1.0f,
                          BORDER_COLOR);
 
-    DrawText("EXPLANATION", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE,
+    DrawAppText("EXPLANATION", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE,
              EXPL_LABEL_COLOR);
     cy += ROW_HEIGHT;
 
     // Section A: dynamic context
-    DrawText("What's happening now", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE,
+    DrawAppText("What's happening now", static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE,
              {220, 220, 130, 255});
     cy += ROW_HEIGHT - 4.0f;
     cy += draw_wrapped_text_ex(whats_happening_now(scheduler, input_a, input_b, result), cx, cy,
@@ -365,8 +366,9 @@ float draw_explanation_panel(float panel_x, float panel_y, float panel_w,
         IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         show_reference = !show_reference;
     }
-    std::string toggle = std::string(show_reference ? "▼ " : "▶ ") + "How it works";
-    DrawText(toggle.c_str(), static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE,
+    // std::string toggle = std::string(show_reference ? "▼ " : "▶ ") + "How it works";
+    std::string toggle = "How it works";
+    DrawAppText(toggle.c_str(), static_cast<int>(cx), static_cast<int>(cy), FONT_SIZE,
              {180, 205, 240, 255});
     cy += ROW_HEIGHT;
 
@@ -377,12 +379,13 @@ float draw_explanation_panel(float panel_x, float panel_y, float panel_w,
     float content_top = cy;
 
     const std::string lines[] = {
-        "What you are seeing: an adder built from logic gates. Signals travel from inputs to outputs over time.",
-        "A0..A6 are bits of the first number and B0..B6 are bits of the second number (0 = low, 1 = high).",
+        "This is an adder built from logic gates, where signals travel from inputs to outputs over time.",
+        "A0..A6 are bits of the first number and B0..B6 are bits of the second number.",
         "Bit 0 is the least-significant bit (LSB). It is the first place where addition starts.",
         "XOR means 'exclusive OR': it is 1 when exactly one input is 1. This gives each sum bit.",
         "AND is 1 only when both inputs are 1. This creates a carry when a bit position overflows.",
-        "OR combines carry paths. NAND means NOT(AND) and can be used to build all other gates.",
+        "OR combines carry paths.",
+        "NAND means NOT(AND) and can be used to build all other gates.",
         "Cout means 'carry out': the extra bit produced when the top bit overflows.",
         "Animation guide: gray/dim = not resolved yet, green = resolved 1, gray steady = resolved 0.",
         "As time advances, carry moves across bits. That carry chain is why some additions take longer.",
